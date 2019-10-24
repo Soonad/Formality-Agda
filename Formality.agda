@@ -117,7 +117,10 @@ postulate
   mul-dist : ∀ a b c → ((a * c) + (b * c)) == ((a + b) * c)
   add-comb : ∀ {a b c d} → a == b → c == d → (a + c) == (b + d)
   sub-fct0 : ∀ a b c d → ((a - b) + (c - d)) == ((a + c) - (b + d))
+  <dist    : ∀ {a b c d} → a < b → c < d → (a + c) <= (b + d)
   <=dist   : ∀ {a b c d} → a <= b → c <= d → (a + c) <= (b + d)
+  <<=dist  : ∀ {a b c d} → a < b → c <= d → (a + c) < (b + d)
+  <=<dist  : ∀ {a b c d} → a <= b → c < d → (a + c) < (b + d)
   ==to<=   : ∀ {a b} → a == b → a <= b
   <=fct0   : ∀ {a b c0 c1 d} → c0 <= c1 → a <= (b + (c0 * d)) → a <= (b + (c1 * d))
   <=fct1   : ∀ {a b0 b1 c} → b0 <= b1 → a <= (b0 + c) → a <= (b1 + c)
@@ -125,6 +128,7 @@ postulate
   <=tran   : ∀ {a b c} → a <= b → b <= c → a <= c
   <=addr   : ∀ {a b} → (x : Nat) → a <= b → a <= (b + x)
   <=incr   : ∀ {a b} → a <= b → a <= succ b
+  <=-to-<  : ∀ {a b} → a <= b → a < succ b
 
 -- ::::::::::::::
 -- :: Language ::
@@ -325,14 +329,47 @@ reduce<= (app (lam fbod) arg) af =
       }
 
 -- Reducing an affine term with redexes reduces its size
--- reduce< : (t : Term) → IsAffine t → HasRedex t → size (reduce t) < size t
--- reduce< (var idx) af ()
--- reduce< (lam bod) (and p q) hr = <succ (reduce< bod q hr)
--- reduce< (app (var fidx) arg) (and p q) (or0 ())
--- reduce< (app (var fidx) arg) (and p q) (or1 oy) = <succ (reduce< arg q oy)
--- reduce< (app (lam fbod) arg) af hr = {!   !}
--- reduce< (app (app ffun farg) arg) (and (and p q) r) (or0 ox) = let k = reduce< (app ffun farg) (and p q) ox in {!   !}
--- reduce< (app (app ffun farg) arg) (and (and p q) r) (or1 oy) = {!   !}
+-- TODO: this is basically a ctrl+c of the function above with small
+-- modifications. Clearly my Agda skills are still needing improvements. How
+-- could this be better abstracted?
+reduce< : (t : Term) → IsAffine t → HasRedex t → size (reduce t) < size t
+reduce< (var idx) af ()
+reduce< (lam bod) af hr = <succ (reduce< bod (snd af) hr)
+reduce< (app (var fidx) arg) af (or0 ())
+reduce< (app (var fidx) arg) af (or1 o1) = <succ (reduce< arg (snd af) o1)
+reduce< (app (app ffun farg) arg) af (or0 o0) =
+  let a = reduce< (app ffun farg) (fst af) o0
+      b = reduce<= arg (snd af)
+      c = <<=dist a b
+  in  <succ c
+reduce< (app (app ffun farg) arg) af (or1 o1) =
+  let a = reduce<= (app ffun farg) (fst af)
+      b = reduce< arg (snd af) o1
+      c = <=<dist a b
+  in  <succ c
+reduce< (app (lam fbod) arg) af unit =
+  let a = reduce<= fbod (snd (fst af))
+      b = reduce<= arg (snd af)
+      c = size-after-subst 0 (reduce fbod) (reduce arg)
+      d = ==to<= c
+      e = reduce-uses 0 fbod (snd (fst af))
+      f = <=fct0 e d
+  in  case fst (fst af) of λ
+      { (or0 o0) →
+        let g = rwt (λ x → size (subst (at 0 (reduce arg)) (reduce fbod)) <= (size (reduce fbod) + (x * size (reduce arg)))) o0 f
+            h = rwt (λ x → size (subst (at 0 (reduce arg)) (reduce fbod)) <= x) (add-n-0 (size (reduce fbod))) g
+            i = <=tran h a
+            j = <=addr (size arg) i
+            k = <=incr j
+        in <=-to-< k
+      ; (or1 o1) →
+        let g = rwt (λ x → size (subst (at 0 (reduce arg)) (reduce fbod)) <= (size (reduce fbod) + (x * size (reduce arg)))) o1 f
+            h = rwt (λ x → size (subst (at 0 (reduce arg)) (reduce fbod)) <= (size (reduce fbod) + x)) (add-n-0 (size (reduce arg))) g
+            i = <=fct1 a h
+            j = <=fct2 b i
+            k = (<=incr j)
+        in <=-to-< k
+      }
 
 -- :::::::::::
 -- :: Tests ::
