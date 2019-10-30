@@ -2,87 +2,10 @@
 -- :: Prelude ::
 -- :::::::::::::
 
--- Empty set
-data Empty : Set where
-
-absurd : {A : Set} → Empty → A
-absurd ()
-
--- Set with one element
-data Unit : Set where
-  unit : Unit
-
--- Set with two elements
-data Bool : Set where
-  true  : Bool
-  false : Bool
-
--- Simple pairs (a.k.a., logical And)
-data And (A : Set) (B : Set) : Set where
-  and : (a : A) → (b : B) → And A B
-
--- First projection
-fst : ∀ {A B} → And A B → A
-fst (and a b) = a
-
--- Second projection
-snd : ∀ {A B} → And A B → B
-snd (and a b) = b
-
--- Simple disjunctions (a.k.a. logical Or)
-data Or (A : Set) (B : Set) : Set where
-  or0 : (a : A) → Or A B
-  or1 : (b : B) → Or A B
-
--- Natural number
-data Nat : Set where
-  succ : Nat -> Nat
-  zero : Nat
-{-# BUILTIN NATURAL Nat #-}
-
--- Nat addition
-_+_ : Nat -> Nat -> Nat
-_+_ (succ n) m = succ (_+_ n m)
-_+_ zero     m = m
-
--- Nat subtraction
-_-_ : Nat -> Nat -> Nat
-succ n - succ m = n - m
-zero   - succ m = zero
-n      - zero   = n
-
--- Nat multiplication
-_*_ : Nat -> Nat -> Nat
-_*_ (succ n) m = m + (n * m)
-_*_ zero     m = zero
-
--- Nat comparison
-same : Nat -> Nat -> Bool
-same zero     zero     = true
-same zero     (succ m) = false
-same (succ n) zero     = false
-same (succ n) (succ m) = same n m
-
--- Propositional equality
-data _==_ {A : Set} (x : A) : (y : A) → Set where
-  refl : x == x
-{-# BUILTIN EQUALITY _==_ #-}
-
--- Congruence of equality
-cong : {A : Set} → {B : Set} → (f : A -> B) → {x : A} → {y : A} → (e : x == y) → f x == f y
-cong f refl = refl
-
--- Symmetry of equality
-sym : {A : Set} → {x : A} → {y : A} → (e : x == y) → y == x
-sym refl = refl
-
--- Transitivity of equality
-trans : {A : Set} → {x : A} → {y : A} → {z : A} → (xy : x == y) → (yz : y == z) → x == z
-trans refl yz = yz
-
--- Rewrites equal terms on types
-rwt : {A : Set} → (P : A -> Set) → {x : A} → {y : A} → (e : x == y) → (p : P x) → P y
-rwt P refl p = p
+module Formality where
+open import Logic
+open import Nat
+open import Equality
 
 -- This enables the "case-of idiom", which isn't built-in
 case_of_ : ∀ {a b} {A : Set a} {B : Set b} → A → (A → B) → B
@@ -94,21 +17,6 @@ module _ {A : Set} {B : A → Set} where
     its : f x == y → Graph f x y
   inspect : (f : ∀ x → B x) (x : A) → Graph f x (f x)
   inspect _ _ = its refl
-
--- Less-than-or-equal
-data _<=_ : (a : Nat) → (b : Nat) → Set where
-  <=zero : ∀ a → 0 <= a
-  <=succ : ∀ {a b} → a <= b → succ a <= succ b 
-
--- Less-than
-data _<_ : (a : Nat) → (b : Nat) → Set where
-  <zero : ∀ a → 0 < succ a
-  <succ : ∀ {a b} → a < b → succ a < succ b 
-
--- A number added to 0 is the same number
-add-n-0 : ∀ n → (n + 0) == n
-add-n-0 (succ n) = cong succ (add-n-0 n)
-add-n-0 zero     = refl
 
 -- Several "obvious" postulates that must be proven
 postulate
