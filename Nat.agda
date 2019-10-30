@@ -57,16 +57,6 @@ same (succ n) 0     = false
 same (succ n) (succ m) = same n m
 {-# BUILTIN NATEQUALS same #-}
 
--- Less-than-or-equal
-data _<=_ : (a : Nat) → (b : Nat) → Set where
-  <=zero : ∀ a → 0 <= a
-  <=succ : ∀ {a b} → a <= b → succ a <= succ b 
-
--- Less-than
-data _<_ : (a : Nat) → (b : Nat) → Set where
-  <zero : ∀ a → 0 < succ a
-  <succ : ∀ {a b} → a < b → succ a < succ b 
-
 -- Arithmetic properties
 -- A number added to 0 is the same number
 add-n-0 : ∀ n → (n + 0) == n
@@ -227,3 +217,88 @@ add-no-inverse : (a b : Nat) -> (a + b) == 0 -> And (a == 0) (b == 0)
 add-no-inverse 0     0     eq = and refl refl
 add-no-inverse 0     (succ b) ()
 add-no-inverse (succ a) _        ()
+
+-- Less-than-or-equal
+data _<=_ : (a b : Nat) → Set where
+  <=zero : ∀ a → 0 <= a
+  <=succ : ∀ {a b} → a <= b → succ a <= succ b 
+
+-- Alternative definition
+_<='_ : (a b : Nat) -> Set 
+a <=' b = Sum Nat (λ (x : Nat) -> (a + x) == b)
+
+lte'->lte : (a b : Nat) -> a <=' b -> a <= b
+lte'->lte 0 b _ = <=zero b
+lte'->lte (succ a) (succ b) (sigma x eq) = <=succ (lte'->lte a b (sigma x (succ-inj eq)))
+
+lte->lte' : (a b : Nat) -> a <= b -> a <=' b
+lte->lte' 0 b _ = sigma b refl
+lte->lte' (succ a) (succ b) (<=succ pf) =
+  let sigma x pf = (lte->lte' a b pf)
+  in sigma x (cong succ pf)
+
+lte-right-wit : {a b : Nat} (x : Nat) -> (a + x) == b -> a <= b
+lte-right-wit {a} {b} x eq = lte'->lte a b (sigma x eq)
+
+lte-left-wit : {a b : Nat} (x : Nat) -> (x + a) == b -> a <= b
+lte-left-wit {a} {b} x eq = lte'->lte a b (sigma x (trans (add-comm a x) eq))
+
+-- Less-than-or-equal properties
+lte-refl : {a b : Nat} -> a == b -> a <= b
+lte-refl {0} {0} _ = <=zero 0
+lte-refl {succ a} {succ b} eq = <=succ (lte-refl (succ-inj eq))
+
+lte-trans : {a b c : Nat} -> a <= b -> b <= c -> a <= c
+lte-trans {a} {b} {c} (<=zero b) _ = (<=zero c)
+lte-trans (<=succ pfa) (<=succ pfb) = <=succ (lte-trans pfa pfb)
+
+lte-antisym : {a b : Nat} -> a <= b -> b <= a -> a == b
+lte-antisym (<=zero 0) (<=zero 0) = refl
+lte-antisym (<=succ pfa) (<=succ pfb) = cong succ (lte-antisym pfa pfb)
+
+lte-total : (a b : Nat) -> Or (a <= b) (b <= a)
+lte-total 0 b = or0 (<=zero b)
+lte-total a 0 = or1 (<=zero a)
+lte-total (succ a) (succ b) = case-or (lte-total a b) (λ x -> or0 (<=succ x)) (λ x -> or1 (<=succ x))
+
+succ-not-lte-0 : {a : Nat} -> Not ((succ a) <= 0) 
+succ-not-lte-0 ()
+
+succ-strict : {a b : Nat} -> (succ a) <= (succ b) -> a <= b
+succ-strict (<=succ pf) = pf
+
+lte-dec : (a b : Nat) -> Or (a <= b) (Not (a <= b))
+lte-dec zero b = or0 (<=zero b)
+lte-dec (succ a) zero = or1 succ-not-lte-0
+lte-dec (succ a) (succ b) = case-or (lte-dec a b) (λ x -> or0 (<=succ x)) (λ x -> or1 (λ pf -> x (succ-strict pf)))
+
+lte-bottom : {a : Nat} -> a <= 0 -> a == 0
+lte-bottom {0} (<=zero 0) = refl
+
+-- Less-than
+data _<_ : (a : Nat) → (b : Nat) → Set where
+  <zero : ∀ a → 0 < succ a
+  <succ : ∀ {a b} → a < b → succ a < succ b 
+
+lt->lte : {a b : Nat} -> a < b -> a <= b
+lt->lte {0} {(succ b)} (<zero b) = <=zero (succ b)
+lt->lte {succ a} {succ b} (<succ pf) = <=succ (lt->lte pf)
+
+lte=lt-or-eq : (a b : Nat) -> a <= b -> Or (a < b) (a == b)
+lte=lt-or-eq zero zero _ = or1 refl
+lte=lt-or-eq zero (succ b) _ = or0 (<zero b)
+lte=lt-or-eq (succ a) (succ b) (<=succ pf) = case-or (lte=lt-or-eq a b pf) (λ x -> or0 (<succ x)) (λ x -> or1 (cong succ x))
+
+-- postulate
+--   sub-fct0 : ∀ a b c d → ((a - b) + (c - d)) == ((a + c) - (b + d))
+--   <dist    : ∀ {a b c d} → a < b → c < d → (a + c) < (b + d)
+--   <=dist   : ∀ {a b c d} → a <= b → c <= d → (a + c) <= (b + d)
+--   <<=dist  : ∀ {a b c d} → a < b → c <= d → (a + c) < (b + d)
+--   <=<dist  : ∀ {a b c d} → a <= b → c < d → (a + c) < (b + d)
+--   <=fct0   : ∀ {a b c0 c1 d} → c0 <= c1 → a <= (b + (c0 * d)) → a <= (b + (c1 * d))
+--   <=fct1   : ∀ {a b0 b1 c} → b0 <= b1 → a <= (b0 + c) → a <= (b1 + c)
+--   <=fct2   : ∀ {a b c0 c1} → c0 <= c1 → a <= (b + c0) → a <= (b + c1)
+--   <=tran   : ∀ {a b c} → a <= b → b <= c → a <= c
+--   <=addr   : ∀ {a b} → (x : Nat) → a <= b → a <= (b + x)
+--   <=incr   : ∀ {a b} → a <= b → a <= succ b
+--   <=-to-<  : ∀ {a b} → a <= b → a < succ b

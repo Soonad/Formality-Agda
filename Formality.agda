@@ -21,17 +21,14 @@ module _ {A : Set} {B : A → Set} where
 -- Several "obvious" postulates that must be proven
 postulate
   funext   : {A : Set} → {B : A → Set} → {f g : (x : A) → B x} → (_ : (x : A) → f x == g x) → f == g
-  add-comb : ∀ {a b c d} → a == b → c == d → (a + c) == (b + d)
   sub-fct0 : ∀ a b c d → ((a - b) + (c - d)) == ((a + c) - (b + d))
-  <dist    : ∀ {a b c d} → a < b → c < d → (a + c) <= (b + d)
+  <dist    : ∀ {a b c d} → a < b → c < d → (a + c) < (b + d)
   <=dist   : ∀ {a b c d} → a <= b → c <= d → (a + c) <= (b + d)
   <<=dist  : ∀ {a b c d} → a < b → c <= d → (a + c) < (b + d)
   <=<dist  : ∀ {a b c d} → a <= b → c < d → (a + c) < (b + d)
-  ==to<=   : ∀ {a b} → a == b → a <= b
   <=fct0   : ∀ {a b c0 c1 d} → c0 <= c1 → a <= (b + (c0 * d)) → a <= (b + (c1 * d))
   <=fct1   : ∀ {a b0 b1 c} → b0 <= b1 → a <= (b0 + c) → a <= (b1 + c)
   <=fct2   : ∀ {a b c0 c1} → c0 <= c1 → a <= (b + c0) → a <= (b + c1)
-  <=tran   : ∀ {a b c} → a <= b → b <= c → a <= c
   <=addr   : ∀ {a b} → (x : Nat) → a <= b → a <= (b + x)
   <=incr   : ∀ {a b} → a <= b → a <= succ b
   <=-to-<  : ∀ {a b} → a <= b → a < succ b
@@ -214,14 +211,14 @@ reduce<= (app (lam fbod) arg) af =
   let a = reduce<= fbod (snd (fst af))
       b = reduce<= arg (snd af)
       c = size-after-subst 0 (reduce fbod) (reduce arg)
-      d = ==to<= c
+      d = lte-refl c
       e = reduce-uses 0 fbod (snd (fst af))
       f = <=fct0 e d
   in  case fst (fst af) of λ
       { (or0 o0) →
         let g = rwt (λ x → size (subst (at 0 (reduce arg)) (reduce fbod)) <= (size (reduce fbod) + (x * size (reduce arg)))) o0 f
             h = rwt (λ x → size (subst (at 0 (reduce arg)) (reduce fbod)) <= x) (add-n-0 (size (reduce fbod))) g
-            i = <=tran h a
+            i = lte-trans h a
             j = <=addr (size arg) i
             k = <=incr (<=incr j)
         in k
@@ -257,14 +254,14 @@ reduce< (app (lam fbod) arg) af unit =
   let a = reduce<= fbod (snd (fst af))
       b = reduce<= arg (snd af)
       c = size-after-subst 0 (reduce fbod) (reduce arg)
-      d = ==to<= c
+      d = lte-refl c
       e = reduce-uses 0 fbod (snd (fst af))
       f = <=fct0 e d
   in  case fst (fst af) of λ
       { (or0 o0) →
         let g = rwt (λ x → size (subst (at 0 (reduce arg)) (reduce fbod)) <= (size (reduce fbod) + (x * size (reduce arg)))) o0 f
             h = rwt (λ x → size (subst (at 0 (reduce arg)) (reduce fbod)) <= x) (add-n-0 (size (reduce fbod))) g
-            i = <=tran h a
+            i = lte-trans h a
             j = <=addr (size arg) i
             k = <=incr j
         in <=-to-< k
