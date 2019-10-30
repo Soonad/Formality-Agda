@@ -12,27 +12,48 @@ data Nat : Set where
 -- Nat addition
 _+_ : Nat -> Nat -> Nat
 _+_ (succ n) m = succ (_+_ n m)
-_+_ zero     m = m
+_+_ 0     m = m
 {-# BUILTIN NATPLUS _+_ #-}
 
 -- Nat subtraction
 _-_ : Nat -> Nat -> Nat
 succ n - succ m = n - m
-zero   - succ m = zero
-n      - zero   = n
+0   - succ m = 0
+n      - 0   = n
 {-# BUILTIN NATMINUS _-_ #-}
 
 -- Nat multiplication
 _*_ : Nat -> Nat -> Nat
 _*_ (succ n) m = m + (n * m)
-_*_ zero     m = zero
+_*_ 0     m = 0
 {-# BUILTIN NATTIMES _*_ #-}
+
+-- Successor is injective
+pred : Nat -> Nat
+pred 0 = 0
+pred (succ n) = n
+
+succ-inj : {a b : Nat} -> (succ a) == (succ b) -> a == b
+succ-inj eq = cong pred eq 
+
+succ-inj' : {a b : Nat} -> Not(a == b) -> Not((succ a) == (succ b))
+succ-inj' = modus-tollens succ-inj
+
+-- Nat equality is decidable
+succ-not-0 : {a : Nat} -> ((succ a) == 0) -> Empty
+succ-not-0 ()
+
+==dec : (a b : Nat) -> Or (a == b) (Not (a == b))
+==dec 0 0 = or0 refl
+==dec (succ a) 0 = or1 succ-not-0
+==dec 0 (succ b) = or1 (λ eq -> succ-not-0 (sym eq))
+==dec (succ a) (succ b) = case-or (==dec a b) (λ x -> or0 (cong succ x)) (λ x -> or1 (succ-inj' x))
 
 -- Nat comparison
 same : Nat -> Nat -> Bool
-same zero     zero     = true
-same zero     (succ m) = false
-same (succ n) zero     = false
+same 0     0     = true
+same 0     (succ m) = false
+same (succ n) 0     = false
 same (succ n) (succ m) = same n m
 {-# BUILTIN NATEQUALS same #-}
 
@@ -46,7 +67,7 @@ data _<_ : (a : Nat) → (b : Nat) → Set where
   <zero : ∀ a → 0 < succ a
   <succ : ∀ {a b} → a < b → succ a < succ b 
 
--- Properties of natural numbers
+-- Arithmetic properties
 -- A number added to 0 is the same number
 add-n-0 : ∀ n → (n + 0) == n
 add-n-0 (succ n) = cong succ (add-n-0 n)
@@ -78,7 +99,7 @@ add-comm (succ a) b =
 
 -- Associativity of the sum
 add-assoc : (a b c : Nat) -> (a + (b + c)) == ((a + b) + c)
-add-assoc zero b c = refl
+add-assoc 0 b c = refl
 add-assoc (succ a) b c =
   begin
     succ (a + (b + c))
@@ -194,3 +215,15 @@ mul-assoc (succ a) b c =
   ==<>
     (((succ a) * b) * c)
   qed
+
+-- Neutral elements
+add-uniq-neutral : (a b : Nat) -> Or ((a + b) == a) ((b + a) == a) -> b == 0
+add-uniq-neutral 0 b (or0 eq) = eq
+add-uniq-neutral 0 b (or1 eq) = trans (sym (add-n-0 b)) eq
+add-uniq-neutral (succ a) b (or0 eq) = add-uniq-neutral a b (or0 (succ-inj eq))
+add-uniq-neutral (succ a) b (or1 eq) = add-uniq-neutral a b (or1 (succ-inj (trans (sym (add-n-succ b a)) eq)))
+
+add-no-inverse : (a b : Nat) -> (a + b) == 0 -> And (a == 0) (b == 0)
+add-no-inverse 0     0     eq = and refl refl
+add-no-inverse 0     (succ b) ()
+add-no-inverse (succ a) _        ()

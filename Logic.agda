@@ -9,6 +9,9 @@ absurd ()
 Not : Set -> Set
 Not A = A -> Empty
 
+modus-tollens : {A B : Set} -> (A -> B) -> (Not B -> Not A)
+modus-tollens f nb a = nb (f a)
+
 -- Set with one element
 data Unit : Set where
   unit : Unit
@@ -40,15 +43,16 @@ data Or (A : Set) (B : Set) : Set where
 
 -- Dependent elimination
 d-case-or : {A B : Set} {C : Or A B -> Set} ->
+            (m : (Or A B)) -> 
             ((a : A) -> C (or0 a)) ->
             ((b : B) -> C (or1 b)) ->
-            (m : (Or A B)) -> C m
-d-case-or inj0 inj1 (or0 a) = inj0 a
-d-case-or inj0 inj1 (or1 b) = inj1 b
+            C m
+d-case-or (or0 a) inj0 inj1 = inj0 a
+d-case-or (or1 b) inj0 inj1 = inj1 b
 
 -- Nondependent elimination
-case-or : {A B C : Set} -> (A -> C) -> (B -> C) -> Or A B -> C
-case-or {A} {B} {C} f g = d-case-or {A} {B} {\ x -> C} f g
+case-or : {A B C : Set} -> Or A B -> (A -> C) -> (B -> C) -> C
+case-or {A} {B} {C} x f g = d-case-or {A} {B} {\ x -> C} x f g
 
 record Sum (A : Set) (B : A → Set) : Set where
   constructor sigma
