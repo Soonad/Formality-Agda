@@ -21,8 +21,6 @@ module _ {A : Set} {B : A → Set} where
 -- Several "obvious" postulates that must be proven
 postulate
   funext   : {A : Set} → {B : A → Set} → {f g : (x : A) → B x} → (_ : (x : A) → f x == g x) → f == g
-  add-swap : ∀ a b c d → ((a + b) + (c + d)) == ((a + c) + (b + d))
-  mul-dist : ∀ a b c → ((a * c) + (b * c)) == ((a + b) * c)
   add-comb : ∀ {a b c d} → a == b → c == d → (a + c) == (b + d)
   sub-fct0 : ∀ a b c d → ((a - b) + (c - d)) == ((a + c) - (b + d))
   <dist    : ∀ {a b c d} → a < b → c < d → (a + c) <= (b + d)
@@ -192,9 +190,9 @@ size-after-subst n (app bfun barg) arg =
       c = refl {x = (size (subst (at n arg) bfun) + size (subst (at n arg) barg))}
       d = rwt (λ x → (x + size (subst (at n arg) barg)) == (size (subst (at n arg) bfun) + size (subst (at n arg) barg))) a c
       e = rwt (λ x → ((size bfun + (uses bfun n * size arg)) + x) == (size (subst (at n arg) bfun) + size (subst (at n arg) barg))) b d
-      f = add-swap (size bfun) (uses bfun n * size arg) (size barg) (uses barg n * size arg)
+      f = add-inner-swap (size bfun) (uses bfun n * size arg) (size barg) (uses barg n * size arg)
       g = sym (rwt (λ x → x == (size (subst (at n arg) bfun) + size (subst (at n arg) barg))) f e)
-      h = mul-dist (uses bfun n) (uses barg n) (size arg)
+      h = sym (mul-rightdist (uses bfun n) (uses barg n) (size arg))
       i = rwt (λ x → (size (subst (at n arg) bfun) + size (subst (at n arg) barg)) == ((size bfun + size barg) + x)) h g
   in  cong succ i
 
