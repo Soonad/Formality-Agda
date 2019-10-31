@@ -21,13 +21,9 @@ module _ {A : Set} {B : A → Set} where
 -- Several "obvious" postulates that must be proven
 postulate
   funext   : {A : Set} → {B : A → Set} → {f g : (x : A) → B x} → (_ : (x : A) → f x == g x) → f == g
-  <dist    : ∀ {a b c d} → a < b → c < d → (a + c) < (b + d)
-  <=dist   : ∀ {a b c d} → a <= b → c <= d → (a + c) <= (b + d)
-  <<=dist  : ∀ {a b c d} → a < b → c <= d → (a + c) < (b + d)
-  <=<dist  : ∀ {a b c d} → a <= b → c < d → (a + c) < (b + d)
-  <=fct0   : ∀ {a b c0 c1 d} → c0 <= c1 → a <= (b + (c0 * d)) → a <= (b + (c1 * d))
   <=fct1   : ∀ {a b0 b1 c} → b0 <= b1 → a <= (b0 + c) → a <= (b1 + c)
   <=fct2   : ∀ {a b c0 c1} → c0 <= c1 → a <= (b + c0) → a <= (b + c1)
+  <=fct0   : ∀ {a b c0 c1 d} → c0 <= c1 → a <= (b + (c0 * d)) → a <= (b + (c1 * d))
 
 -- ::::::::::::::
 -- :: Language ::
@@ -201,7 +197,7 @@ reduce<= (app (var fidx) arg) af = <=succ (reduce<= arg (snd af))
 reduce<= (app (app ffun farg) arg) af =
   let a = reduce<= (app ffun farg) (fst af)
       b = reduce<= arg (snd af)
-      c = <=dist a b
+      c = <=-cong-+ a b
   in  <=succ c
 reduce<= (app (lam fbod) arg) af =
   let a = reduce<= fbod (snd (fst af))
@@ -239,12 +235,12 @@ reduce< (app (var fidx) arg) af (or1 o1) = <succ (reduce< arg (snd af) o1)
 reduce< (app (app ffun farg) arg) af (or0 o0) =
   let a = reduce< (app ffun farg) (fst af) o0
       b = reduce<= arg (snd af)
-      c = <<=dist a b
+      c = <-cong-+ a b
   in  <succ c
 reduce< (app (app ffun farg) arg) af (or1 o1) =
   let a = reduce<= (app ffun farg) (fst af)
       b = reduce< arg (snd af) o1
-      c = <=<dist a b
+      c = <-cong-+' a b
   in  <succ c
 reduce< (app (lam fbod) arg) af unit =
   let a = reduce<= fbod (snd (fst af))

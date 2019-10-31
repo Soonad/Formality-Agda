@@ -206,6 +206,31 @@ mul-assoc (succ a) b c =
     (((succ a) * b) * c)
   qed
 
+
+mul-left-swap : ∀ a b c → (a * (b * c)) == (b * (a * c))
+mul-left-swap a b c =
+  begin
+    (a * (b * c))
+  ==< mul-assoc a b c >
+    ((a * b) * c)
+  ==< cong (_* c) (mul-comm a b) >
+    ((b * a) * c)
+  ==< sym (mul-assoc b a c) >
+    (b * (a * c))
+  qed
+
+mul-inner-swap : ∀ a b c d → ((a * b) * (c * d)) == ((a * c) * (b * d))
+mul-inner-swap a b c d =
+  begin
+    ((a * b) * (c * d))
+  ==< sym (mul-assoc a b (c * d)) >
+    (a * (b * (c * d)))
+  ==< cong (a *_) (mul-left-swap b c d) >
+    (a * (c * (b * d)))
+  ==< mul-assoc a c (b * d) >
+    ((a * c) * (b * d))
+  qed
+
 -- Neutral elements
 add-uniq-neutral : (a b : Nat) -> Or ((a + b) == a) ((b + a) == a) -> b == 0
 add-uniq-neutral 0 b (or0 eq) = eq
@@ -329,3 +354,85 @@ not->=-to-< : {a b : Nat} -> Not(b <= a) -> a < b
 not->=-to-< {a} {zero} neg = absurd (neg (<=zero a))
 not->=-to-< {zero} {succ b} _ = <zero b
 not->=-to-< {succ a} {succ b} neg = <succ (not->=-to-< (λ (pf : b <= a) -> neg (<=succ pf)))
+
+-- Equational properties
+<=-cong-+ : ∀ {a b c d}
+          → a <= b
+          → c <= d
+          --------------------
+          → (a + c) <= (b + d)
+<=-cong-+ {a} {b} {c} {d} pf1 pf2 = let
+  sigma x a+x==b = <=-to-<=' pf1
+  sigma y c+y==d = <=-to-<=' pf2
+  eq =
+    begin
+      (a + c) + (x + y)
+    ==< add-inner-swap a c x y >
+      (a + x) + (c + y)
+    ==< cong (_+ (c + y)) a+x==b >
+      b + (c + y)
+    ==< cong (b +_) c+y==d >
+      b + d
+    qed
+  in <='-to-<= (sigma (x + y) eq)
+
+<=-cong-* : ∀ {a b c d}
+          → a <= b
+          → c <= d
+          --------------------
+          → (a * c) <= (b * d)
+<=-cong-* {a} {b} {c} {d} pf1 pf2 = let
+  sigma x a*x==b = <=-to-<=' pf1
+  sigma y c*y==d = <=-to-<=' pf2
+  witness = (a * y) + ((x * c) + (x * y))
+  -- Steps needed to prove equality
+  step1 = add-assoc (a * c) (a * y) ((x * c) + (x * y)) 
+  step2 = cong (_+ ((x * c) + (x * y))) (sym (mul-leftdist a c y)) 
+  step3 = cong ((a * (c + y)) +_) (sym (mul-leftdist x c y)) 
+  step4 = (sym (mul-rightdist a x (c + y))) 
+  step5 = cong (_* (c + y)) a*x==b 
+  step6 = cong (b *_) c*y==d 
+  eq =
+    begin
+      (a * c) + ((a * y) + ((x * c) + (x * y)))
+    ==< step1 >
+      ((a * c) + (a * y)) + ((x * c) + (x * y))
+    ==< step2 >
+      (a * (c + y)) + ((x * c) + (x * y))
+    ==< step3 >
+      (a * (c + y)) + (x  * (c + y))
+    ==< step4 >
+      (a + x) * (c + y)
+    ==< step5 >
+      b * (c + y)
+    ==< step6 >
+      b * d
+    qed
+  in <='-to-<= (sigma witness eq)
+
+<-cong-+ : ∀ {a b c d}
+          → a < b
+          → c <= d
+          --------------------
+          → (a + c) < (b + d)
+<-cong-+ {a} {b} {c} {d} pf1 pf2 = let
+  sigma x 1+a+x==b = <-to-<' pf1
+  sigma y c+y==d = <=-to-<=' pf2
+  eq =
+    begin
+      succ ((a + c) + (x + y))
+    ==< cong succ (add-inner-swap a c x y) >
+      succ ((a + x) + (c + y))
+    ==< cong (_+ (c + y)) 1+a+x==b >
+      b + (c + y)
+    ==< cong (b +_) c+y==d >
+      b + d
+    qed
+  in <'-to-< (sigma (x + y) eq)
+
+<-cong-+' : ∀ {a b c d}
+          → a <= b
+          → c < d
+          --------------------
+          → (a + c) < (b + d)
+<-cong-+' {a} {b} {c} {d} pf1 pf2 = rwt (λ x -> (a + c) < x) (add-comm d b) (rwt (λ x -> x < (d + b)) (add-comm c a) (<-cong-+ pf2 pf1))
