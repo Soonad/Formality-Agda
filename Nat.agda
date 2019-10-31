@@ -227,78 +227,105 @@ data _<=_ : (a b : Nat) → Set where
 _<='_ : (a b : Nat) -> Set 
 a <=' b = Sum Nat (λ (x : Nat) -> (a + x) == b)
 
-lte'->lte : (a b : Nat) -> a <=' b -> a <= b
-lte'->lte 0 b _ = <=zero b
-lte'->lte (succ a) (succ b) (sigma x eq) = <=succ (lte'->lte a b (sigma x (succ-inj eq)))
+<='-to-<= : {a b : Nat} -> a <=' b -> a <= b
+<='-to-<= {0} {b} _ = <=zero b
+<='-to-<= {succ a} {succ b} (sigma x eq) = <=succ (<='-to-<= (sigma x (succ-inj eq)))
 
-lte->lte' : (a b : Nat) -> a <= b -> a <=' b
-lte->lte' 0 b _ = sigma b refl
-lte->lte' (succ a) (succ b) (<=succ pf) =
-  let sigma x pf = (lte->lte' a b pf)
+<=-to-<=' : {a b : Nat} -> a <= b -> a <=' b
+<=-to-<=' {0} {b} _ = sigma b refl
+<=-to-<=' {succ a} {succ b} (<=succ pf) =
+  let sigma x pf = (<=-to-<=' pf)
   in sigma x (cong succ pf)
 
-lte-right-wit : {a b : Nat} (x : Nat) -> (a + x) == b -> a <= b
-lte-right-wit {a} {b} x eq = lte'->lte a b (sigma x eq)
+<=-right-wit : {a b : Nat} (x : Nat) -> (a + x) == b -> a <= b
+<=-right-wit {a} {b} x eq = <='-to-<= (sigma x eq)
 
-lte-left-wit : {a b : Nat} (x : Nat) -> (x + a) == b -> a <= b
-lte-left-wit {a} {b} x eq = lte'->lte a b (sigma x (trans (add-comm a x) eq))
+<=-left-wit : {a b : Nat} (x : Nat) -> (x + a) == b -> a <= b
+<=-left-wit {a} {b} x eq = <='-to-<= (sigma x (trans (add-comm a x) eq))
 
 -- Less-than-or-equal properties
-lte-refl : {a b : Nat} -> a == b -> a <= b
-lte-refl {0} {0} _ = <=zero 0
-lte-refl {succ a} {succ b} eq = <=succ (lte-refl (succ-inj eq))
+<=-refl : {a b : Nat} -> a == b -> a <= b
+<=-refl {0} {0} _ = <=zero 0
+<=-refl {succ a} {succ b} eq = <=succ (<=-refl (succ-inj eq))
 
-lte-trans : {a b c : Nat} -> a <= b -> b <= c -> a <= c
-lte-trans {a} {b} {c} (<=zero b) _ = (<=zero c)
-lte-trans (<=succ pfa) (<=succ pfb) = <=succ (lte-trans pfa pfb)
+<=-trans : {a b c : Nat} -> a <= b -> b <= c -> a <= c
+<=-trans {a} {b} {c} (<=zero b) _ = (<=zero c)
+<=-trans (<=succ pfa) (<=succ pfb) = <=succ (<=-trans pfa pfb)
 
-lte-antisym : {a b : Nat} -> a <= b -> b <= a -> a == b
-lte-antisym (<=zero 0) (<=zero 0) = refl
-lte-antisym (<=succ pfa) (<=succ pfb) = cong succ (lte-antisym pfa pfb)
+<=-antisym : {a b : Nat} -> a <= b -> b <= a -> a == b
+<=-antisym (<=zero 0) (<=zero 0) = refl
+<=-antisym (<=succ pfa) (<=succ pfb) = cong succ (<=-antisym pfa pfb)
 
-lte-total : (a b : Nat) -> Or (a <= b) (b <= a)
-lte-total 0 b = or0 (<=zero b)
-lte-total a 0 = or1 (<=zero a)
-lte-total (succ a) (succ b) = case-or (lte-total a b) (λ x -> or0 (<=succ x)) (λ x -> or1 (<=succ x))
+<=-total : (a b : Nat) -> Or (a <= b) (b <= a)
+<=-total 0 b = or0 (<=zero b)
+<=-total a 0 = or1 (<=zero a)
+<=-total (succ a) (succ b) = case-or (<=-total a b) (λ x -> or0 (<=succ x)) (λ x -> or1 (<=succ x))
 
-succ-not-lte-0 : {a : Nat} -> Not ((succ a) <= 0) 
-succ-not-lte-0 ()
+succ-not-<=-0 : {a : Nat} -> Not ((succ a) <= 0) 
+succ-not-<=-0 ()
 
 succ-strict : {a b : Nat} -> (succ a) <= (succ b) -> a <= b
 succ-strict (<=succ pf) = pf
 
-lte-dec : (a b : Nat) -> Or (a <= b) (Not (a <= b))
-lte-dec zero b = or0 (<=zero b)
-lte-dec (succ a) zero = or1 succ-not-lte-0
-lte-dec (succ a) (succ b) = case-or (lte-dec a b) (λ x -> or0 (<=succ x)) (λ x -> or1 (λ pf -> x (succ-strict pf)))
+<=-dec : (a b : Nat) -> Or (a <= b) (Not (a <= b))
+<=-dec zero b = or0 (<=zero b)
+<=-dec (succ a) zero = or1 succ-not-<=-0
+<=-dec (succ a) (succ b) = case-or (<=-dec a b) (λ x -> or0 (<=succ x)) (λ x -> or1 (λ pf -> x (succ-strict pf)))
 
-lte-bottom : {a : Nat} -> a <= 0 -> a == 0
-lte-bottom {0} (<=zero 0) = refl
+<=-bottom : {a : Nat} -> a <= 0 -> a == 0
+<=-bottom {0} (<=zero 0) = refl
 
 -- Less-than
 data _<_ : (a : Nat) → (b : Nat) → Set where
   <zero : ∀ a → 0 < succ a
   <succ : ∀ {a b} → a < b → succ a < succ b 
 
-lt->lte : {a b : Nat} -> a < b -> a <= b
-lt->lte {0} {(succ b)} (<zero b) = <=zero (succ b)
-lt->lte {succ a} {succ b} (<succ pf) = <=succ (lt->lte pf)
+n-<-succ : {n : Nat} -> n < succ(n)
+n-<-succ {0} = <zero 0
+n-<-succ {succ n} = <succ n-<-succ
 
-lte=lt-or-eq : (a b : Nat) -> a <= b -> Or (a < b) (a == b)
-lte=lt-or-eq zero zero _ = or1 refl
-lte=lt-or-eq zero (succ b) _ = or0 (<zero b)
-lte=lt-or-eq (succ a) (succ b) (<=succ pf) = case-or (lte=lt-or-eq a b pf) (λ x -> or0 (<succ x)) (λ x -> or1 (cong succ x))
+<-to-<= : {a b : Nat} -> a < b -> (succ a) <= b
+<-to-<= {0} {(succ b)} (<zero b) = <=succ (<=zero b)
+<-to-<= {succ a} {succ b} (<succ pf) = <=succ (<-to-<= pf)
 
--- postulate
---   sub-fct0 : ∀ a b c d → ((a - b) + (c - d)) == ((a + c) - (b + d))
---   <dist    : ∀ {a b c d} → a < b → c < d → (a + c) < (b + d)
---   <=dist   : ∀ {a b c d} → a <= b → c <= d → (a + c) <= (b + d)
---   <<=dist  : ∀ {a b c d} → a < b → c <= d → (a + c) < (b + d)
---   <=<dist  : ∀ {a b c d} → a <= b → c < d → (a + c) < (b + d)
---   <=fct0   : ∀ {a b c0 c1 d} → c0 <= c1 → a <= (b + (c0 * d)) → a <= (b + (c1 * d))
---   <=fct1   : ∀ {a b0 b1 c} → b0 <= b1 → a <= (b0 + c) → a <= (b1 + c)
---   <=fct2   : ∀ {a b c0 c1} → c0 <= c1 → a <= (b + c0) → a <= (b + c1)
---   <=tran   : ∀ {a b c} → a <= b → b <= c → a <= c
---   <=addr   : ∀ {a b} → (x : Nat) → a <= b → a <= (b + x)
---   <=incr   : ∀ {a b} → a <= b → a <= succ b
---   <=-to-<  : ∀ {a b} → a <= b → a < succ b
+<=-to-< : {a b : Nat} -> (succ a) <= b -> a < b
+<=-to-< {zero} {succ b} _ = <zero b
+<=-to-< {succ a} {succ b} (<=succ pf) = <succ (<=-to-< pf)
+
+<=-is-<-or-== : (a b : Nat) -> a <= b -> Or (a < b) (a == b)
+<=-is-<-or-== zero zero _ = or1 refl
+<=-is-<-or-== zero (succ b) _ = or0 (<zero b)
+<=-is-<-or-== (succ a) (succ b) (<=succ pf) = case-or (<=-is-<-or-== a b pf) (λ x -> or0 (<succ x)) (λ x -> or1 (cong succ x))
+
+<=-incr-r : ∀ {a b} → (x : Nat) → a <= b → a <= (b + x)
+<=-incr-r {a} {b} x pf =
+  let (sigma y eq) = <=-to-<=' pf
+  in <='-to-<= (sigma (y + x)
+    (begin
+      a + (y + x)
+    ==< (add-assoc a y x) >
+      (a + y) + x
+    ==< (cong (_+ x) eq) >
+      b + x
+    qed))
+
+<=-incr-l : ∀ {a b} → (x : Nat) → a <= b → a <= (x + b)
+<=-incr-l {a} {b} x pf = rwt (λ X -> a <= X) (add-comm b x) (<=-incr-r x pf)
+
+-- Equivalent definitions of less-than
+_<'_ : (a b : Nat) -> Set
+a <' b = (succ a) <=' b
+
+<'-to-< : {a b : Nat} -> a <' b -> a < b
+<'-to-< pf = <=-to-< (<='-to-<= pf)
+
+<-to-<' : {a b : Nat} -> a < b -> a <' b
+<-to-<' pf = <=-to-<=' (<-to-<= pf)
+
+<-to-not->= : {a b : Nat} -> a < b -> Not(b <= a)
+<-to-not->= {succ a} {succ b} (<succ pf1) pf2 = <-to-not->= pf1 (succ-strict pf2) -- all other cases are inconsistent
+
+not->=-to-< : {a b : Nat} -> Not(b <= a) -> a < b
+not->=-to-< {a} {zero} neg = absurd (neg (<=zero a))
+not->=-to-< {zero} {succ b} _ = <zero b
+not->=-to-< {succ a} {succ b} neg = <succ (not->=-to-< (λ (pf : b <= a) -> neg (<=succ pf)))
