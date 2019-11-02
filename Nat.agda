@@ -73,17 +73,17 @@ add-comm : (a b : Nat) -> (a + b) == (b + a)
 add-comm 0 b =
   begin
     0 + b
-  ==< sym (add-n-0 b) >
+  ==[ sym (add-n-0 b) ]
     b + 0
   qed
 add-comm (succ a) b =
   begin
     (succ a) + b
-  ==<>
+  ==[]
     succ (a + b)
-  ==< cong succ (add-comm a b) >
+  ==[ cong succ (add-comm a b) ]
     succ (b + a)
-  ==< sym (add-n-succ b a) >
+  ==[ sym (add-n-succ b a) ]
     b + (succ a)
   qed
 
@@ -93,9 +93,9 @@ add-assoc 0 b c = refl
 add-assoc (succ a) b c =
   begin
     succ (a + (b + c))
-  ==< cong succ (add-assoc a b c) >
+  ==[ cong succ (add-assoc a b c) ]
     succ ((a + b) + c)
-  ==<>
+  ==[]
     ((succ a) + b) + c
   qed
 
@@ -103,11 +103,11 @@ add-left-swap : ∀ a b c → (a + (b + c)) == (b + (a + c))
 add-left-swap a b c =
   begin
     (a + (b + c))
-  ==< add-assoc a b c >
+  ==[ add-assoc a b c ]
     ((a + b) + c)
-  ==< cong (_+ c) (add-comm a b) >
+  ==[ cong (_+ c) (add-comm a b) ]
     ((b + a) + c)
-  ==< sym (add-assoc b a c) >
+  ==[ sym (add-assoc b a c) ]
     (b + (a + c))
   qed
 
@@ -115,11 +115,11 @@ add-inner-swap : ∀ a b c d → ((a + b) + (c + d)) == ((a + c) + (b + d))
 add-inner-swap a b c d =
   begin
     ((a + b) + (c + d))
-  ==< sym (add-assoc a b (c + d)) >
+  ==[ sym (add-assoc a b (c + d)) ]
     (a + (b + (c + d)))
-  ==< cong (a +_) (add-left-swap b c d) >
+  ==[ cong (a +_) (add-left-swap b c d) ]
     (a + (c + (b + d)))
-  ==< add-assoc a c (b + d) >
+  ==[ add-assoc a c (b + d) ]
     ((a + c) + (b + d))
   qed
 
@@ -136,15 +136,15 @@ mul-n-succ 0 m = refl
 mul-n-succ (succ n) m =
   begin
     (succ n) * (succ m)
-  ==<>
+  ==[]
     (succ m) + (n * (succ m))
-  ==< cong (_+_ (succ m)) (mul-n-succ n m) >
+  ==[ cong (_+_ (succ m)) (mul-n-succ n m) ]
     (succ m) + (n + (n * m))
-  ==<>
+  ==[]
     succ (m + (n + (n * m)))
-  ==< cong succ (add-left-swap m n (n * m)) >
+  ==[ cong succ (add-left-swap m n (n * m)) ]
     succ (n + (m + (n * m)))
-  ==<>
+  ==[]
     ((succ n) + ((succ n) * m))
   qed
  
@@ -153,11 +153,11 @@ mul-comm 0 b = sym (mul-n-0 b)
 mul-comm (succ a) b =
   begin
     ((succ a) * b)
-  ==<>
+  ==[]
     b + (a * b)
-  ==< cong (b +_) (mul-comm a b) >
+  ==[ cong (b +_) (mul-comm a b) ]
     b + (b * a)
-  ==< sym (mul-n-succ b a) >
+  ==[ sym (mul-n-succ b a) ]
     (b * (succ a))
   qed
 
@@ -166,13 +166,13 @@ mul-leftdist 0 b c = refl
 mul-leftdist (succ a) b c =
   begin
     ((succ a) * (b + c))
-  ==<>
+  ==[]
     (b + c) + (a * (b + c))
-  ==< cong ((b + c) +_) (mul-leftdist a b c) >
+  ==[ cong ((b + c) +_) (mul-leftdist a b c) ]
     (b + c) + ((a * b) + (a * c))
-  ==< (add-inner-swap b c (a * b) (a * c)) >
+  ==[ (add-inner-swap b c (a * b) (a * c)) ]
     ((b + (a * b)) + (c + (a * c)))
-  ==<>
+  ==[]
     (((succ a) * b) + ((succ a) * c))
   qed
 
@@ -181,13 +181,13 @@ mul-rightdist : (a b c : Nat) -> ((a + b) * c) == ((a * c) + (b * c))
 mul-rightdist a b c =
   begin
     ((a + b) * c)
-  ==< mul-comm (a + b) c >
+  ==[ mul-comm (a + b) c ]
     (c * (a + b))
-  ==< mul-leftdist c a b >
+  ==[ mul-leftdist c a b ]
     ((c * a) + (c * b))
-  ==< cong ((c * a) +_) (mul-comm c b) >
+  ==[ cong ((c * a) +_) (mul-comm c b) ]
     ((c * a) + (b * c))
-  ==< cong (_+ (b * c)) (mul-comm c a) >
+  ==[ cong (_+ (b * c)) (mul-comm c a) ]
     ((a * c) + (b * c))
   qed
 
@@ -196,13 +196,13 @@ mul-assoc 0 b c = refl
 mul-assoc (succ a) b c =
   begin
     (succ a) * (b * c)
-  ==<>
+  ==[]
     (b * c) + (a * (b * c))
-  ==< cong ((b * c) +_) (mul-assoc a b c) >
+  ==[ cong ((b * c) +_) (mul-assoc a b c) ]
     (b * c) + ((a * b) * c)
-  ==< sym (mul-rightdist b (a * b) c) >
+  ==[ sym (mul-rightdist b (a * b) c) ]
     (b + (a * b)) * c
-  ==<>
+  ==[]
     (((succ a) * b) * c)
   qed
 
@@ -211,11 +211,11 @@ mul-left-swap : ∀ a b c → (a * (b * c)) == (b * (a * c))
 mul-left-swap a b c =
   begin
     (a * (b * c))
-  ==< mul-assoc a b c >
+  ==[ mul-assoc a b c ]
     ((a * b) * c)
-  ==< cong (_* c) (mul-comm a b) >
+  ==[ cong (_* c) (mul-comm a b) ]
     ((b * a) * c)
-  ==< sym (mul-assoc b a c) >
+  ==[ sym (mul-assoc b a c) ]
     (b * (a * c))
   qed
 
@@ -223,11 +223,11 @@ mul-inner-swap : ∀ a b c d → ((a * b) * (c * d)) == ((a * c) * (b * d))
 mul-inner-swap a b c d =
   begin
     ((a * b) * (c * d))
-  ==< sym (mul-assoc a b (c * d)) >
+  ==[ sym (mul-assoc a b (c * d)) ]
     (a * (b * (c * d)))
-  ==< cong (a *_) (mul-left-swap b c d) >
+  ==[ cong (a *_) (mul-left-swap b c d) ]
     (a * (c * (b * d)))
-  ==< mul-assoc a c (b * d) >
+  ==[ mul-assoc a c (b * d) ]
     ((a * c) * (b * d))
   qed
 
@@ -248,30 +248,24 @@ data _<=_ : (a b : Nat) → Set where
   <=zero : ∀ a → 0 <= a
   <=succ : ∀ {a b} → a <= b → succ a <= succ b 
 
--- Alternative definition
-_<='_ : (a b : Nat) -> Set 
-a <=' b = Sum Nat (λ (x : Nat) -> (a + x) == b)
-
-<='-to-<= : {a b : Nat} -> a <=' b -> a <= b
-<='-to-<= {0} {b} _ = <=zero b
-<='-to-<= {succ a} {succ b} (sigma x eq) = <=succ (<='-to-<= (sigma x (succ-inj eq)))
-
-<=-to-<=' : {a b : Nat} -> a <= b -> a <=' b
-<=-to-<=' {0} {b} _ = sigma b refl
-<=-to-<=' {succ a} {succ b} (<=succ pf) =
-  let sigma x pf = (<=-to-<=' pf)
+-- An alternative definition of `a <= b` which is really useful is `exists x : Nat, a + x = b` therefore we can write the following functions:
+<=-add-get : {a b : Nat} -> a <= b -> Sum Nat (λ (x : Nat) -> (a + x) == b)
+<=-add-get {0} {b} _ = sigma b refl
+<=-add-get {succ a} {succ b} (<=succ pf) =
+  let sigma x pf = (<=-add-get pf)
   in sigma x (cong succ pf)
 
-<=-right-wit : {a b : Nat} (x : Nat) -> (a + x) == b -> a <= b
-<=-right-wit {a} {b} x eq = <='-to-<= (sigma x eq)
-
-<=-left-wit : {a b : Nat} (x : Nat) -> (x + a) == b -> a <= b
-<=-left-wit {a} {b} x eq = <='-to-<= (sigma x (trans (add-comm a x) eq))
+<=-add : {a b : Nat} (x : Nat) -> (a + x) == b -> a <= b
+<=-add {0} {b} _ _ = <=zero b
+<=-add {succ a} {succ b} x eq = <=succ (<=-add x (succ-inj eq))
 
 -- Less-than-or-equal properties
 <=-refl : {a b : Nat} -> a == b -> a <= b
 <=-refl {0} {0} _ = <=zero 0
 <=-refl {succ a} {succ b} eq = <=succ (<=-refl (succ-inj eq))
+
+<=-refl' : {a : Nat} -> a <= a
+<=-refl' = <=-refl refl
 
 <=-trans : {a b c : Nat} -> a <= b -> b <= c -> a <= c
 <=-trans {a} {b} {c} (<=zero b) _ = (<=zero c)
@@ -300,6 +294,44 @@ succ-strict (<=succ pf) = pf
 <=-bottom : {a : Nat} -> a <= 0 -> a == 0
 <=-bottom {0} (<=zero 0) = refl
 
+<=-incr-r : ∀ {a b} → (x : Nat) → a <= b → a <= (b + x)
+<=-incr-r {a} {b} x pf =
+  let (sigma y eq) = <=-add-get pf
+  in <=-add (y + x)
+    (begin
+      a + (y + x)
+    ==[ (add-assoc a y x) ]
+      (a + y) + x
+    ==[ (cong (_+ x) eq) ]
+      b + x
+    qed)
+
+<=-incr-l : ∀ {a b} → (x : Nat) → a <= b → a <= (x + b)
+<=-incr-l {a} {b} x pf = rwt (λ X -> a <= X) (add-comm b x) (<=-incr-r x pf)
+
+-- Less-than-or-equal-to Reasoning
+infix  1 begin<=_
+infixr 2 _<=[_]_
+infix  3 _qed<=
+
+begin<=_ : ∀ {x y : Nat}
+  → x <= y
+    -----
+  → x <= y
+begin<= x<=y  =  x<=y
+
+_<=[_]_ : ∀ (x : Nat) {y z : Nat}
+  → x <= y
+  → y <= z
+    -----
+  → x <= z
+x <=[ x<=y ] y<=z  =  <=-trans x<=y y<=z
+
+_qed<= : ∀ (x : Nat)
+    -----
+  → x <= x
+x qed<=  =  <=-refl'
+
 -- Less-than
 data _<_ : (a : Nat) → (b : Nat) → Set where
   <zero : ∀ a → 0 < succ a
@@ -322,31 +354,18 @@ n-<-succ {succ n} = <succ n-<-succ
 <=-is-<-or-== zero (succ b) _ = or0 (<zero b)
 <=-is-<-or-== (succ a) (succ b) (<=succ pf) = case-or (<=-is-<-or-== a b pf) (λ x -> or0 (<succ x)) (λ x -> or1 (cong succ x))
 
-<=-incr-r : ∀ {a b} → (x : Nat) → a <= b → a <= (b + x)
-<=-incr-r {a} {b} x pf =
-  let (sigma y eq) = <=-to-<=' pf
-  in <='-to-<= (sigma (y + x)
-    (begin
-      a + (y + x)
-    ==< (add-assoc a y x) >
-      (a + y) + x
-    ==< (cong (_+ x) eq) >
-      b + x
-    qed))
+<-stronger-<= : {a b : Nat} -> a < b -> a <= b
+<-stronger-<= {0} {(succ b)} (<zero b) = <=zero (succ b)
+<-stronger-<= {succ a} {succ b} (<succ pf) = <=succ (<-stronger-<= pf)
 
-<=-incr-l : ∀ {a b} → (x : Nat) → a <= b → a <= (x + b)
-<=-incr-l {a} {b} x pf = rwt (λ X -> a <= X) (add-comm b x) (<=-incr-r x pf)
+-- An alternative definition of `a < b` is, similarly, is `exists x : Nat, succ (a + x) = b` therefore we can write the following functions:
+<-add : {a b : Nat} (x : Nat) -> succ (a + x) == b -> a < b
+<-add x eq = <=-to-< (<=-add x eq)
 
--- Equivalent definitions of less-than
-_<'_ : (a b : Nat) -> Set
-a <' b = (succ a) <=' b
+<-add-get : {a b : Nat} -> a < b -> Sum Nat (λ (x : Nat) -> succ (a + x) == b)
+<-add-get pf = <=-add-get (<-to-<= pf)
 
-<'-to-< : {a b : Nat} -> a <' b -> a < b
-<'-to-< pf = <=-to-< (<='-to-<= pf)
-
-<-to-<' : {a b : Nat} -> a < b -> a <' b
-<-to-<' pf = <=-to-<=' (<-to-<= pf)
-
+-- Yet another alternative definition of `a < b` is `not (b <= a)`
 <-to-not->= : {a b : Nat} -> a < b -> Not(b <= a)
 <-to-not->= {succ a} {succ b} (<succ pf1) pf2 = <-to-not->= pf1 (succ-strict pf2) -- all other cases are inconsistent
 
@@ -355,35 +374,103 @@ not->=-to-< {a} {zero} neg = absurd (neg (<=zero a))
 not->=-to-< {zero} {succ b} _ = <zero b
 not->=-to-< {succ a} {succ b} neg = <succ (not->=-to-< (λ (pf : b <= a) -> neg (<=succ pf)))
 
+<-comb-<= : {a b c : Nat} -> a < b -> b <= c -> a < c
+<-comb-<= {a} {b} {c} a<b b<=c = let
+  sigma x 1+a+x==b = <-add-get a<b
+  sigma y b+y==c = <=-add-get b<=c
+  eq =
+    begin
+      succ (a + (x + y))
+    ==[ cong succ (add-assoc a x y) ]
+      succ ((a + x) + y)
+    ==[ cong (_+ y) 1+a+x==b ]
+      b + y
+    ==[ b+y==c ]
+      c
+    qed
+  in <-add (x + y) eq
+
+<=-comb-< : {a b c : Nat} -> a <= b -> b < c -> a < c
+<=-comb-< {a} {b} {c} a<=b b<c = let
+  sigma x a+x==b = <=-add-get a<=b
+  sigma y 1+b+y==c = <-add-get b<c
+  eq =
+    begin
+      succ (a + (x + y))
+    ==[ cong succ (add-assoc a x y) ]
+      succ ((a + x) + y)
+    ==[ cong (λ x -> succ (x + y)) a+x==b ]
+      succ (b + y)
+    ==[ 1+b+y==c ]
+      c
+    qed
+  in <-add (x + y) eq
+
+-- Less-than Reasoning: requires proving only one < statement in the whole reasoning chain. The rest can be proven by weaker <= statements
+infix  1 begin<_
+infixr 2 _<[_]_
+infix  3 _qed<
+
+begin<_ : ∀ {x y : Nat}
+  → x < y
+    -----
+  → x < y
+begin< x<y  =  x<y
+
+_<[_]_ : ∀ (x : Nat) {y z : Nat}
+  → x < y
+  → y <= z
+    -----
+  → x < z
+x <[ x<y ] y<=z =  <-comb-<= x<y y<=z
+
+_<='[_]_ : ∀ (x : Nat) {y z : Nat}
+  → x <= y
+  → y < z
+    -----
+  → x < z
+x <='[ x<=y ] y<z =  <=-comb-< x<=y y<z
+
+_qed< : ∀ (x : Nat)
+    -----
+  → x <= x
+x qed<  =  <=-refl'
+
 -- Equational properties
-<=-cong-+ : ∀ {a b c d}
+<=-additive : ∀ {a b c d}
           → a <= b
           → c <= d
           --------------------
           → (a + c) <= (b + d)
-<=-cong-+ {a} {b} {c} {d} pf1 pf2 = let
-  sigma x a+x==b = <=-to-<=' pf1
-  sigma y c+y==d = <=-to-<=' pf2
+<=-additive {a} {b} {c} {d} pf1 pf2 = let
+  sigma x a+x==b = <=-add-get pf1
+  sigma y c+y==d = <=-add-get pf2
   eq =
     begin
       (a + c) + (x + y)
-    ==< add-inner-swap a c x y >
+    ==[ add-inner-swap a c x y ]
       (a + x) + (c + y)
-    ==< cong (_+ (c + y)) a+x==b >
+    ==[ cong (_+ (c + y)) a+x==b ]
       b + (c + y)
-    ==< cong (b +_) c+y==d >
+    ==[ cong (b +_) c+y==d ]
       b + d
     qed
-  in <='-to-<= (sigma (x + y) eq)
+  in <=-add (x + y) eq
 
-<=-cong-* : ∀ {a b c d}
+<=-cong-add-r : ∀ {a b} (c : Nat) → a <= b → (a + c) <= (b + c)
+<=-cong-add-r c pf = <=-additive pf (<=-refl' {c})
+
+<=-cong-add-l : ∀ {a b} (c : Nat) → a <= b → (c + a) <= (c + b)
+<=-cong-add-l c pf = <=-additive (<=-refl' {c}) pf
+
+<=-multiplicative : ∀ {a b c d}
           → a <= b
           → c <= d
           --------------------
           → (a * c) <= (b * d)
-<=-cong-* {a} {b} {c} {d} pf1 pf2 = let
-  sigma x a*x==b = <=-to-<=' pf1
-  sigma y c*y==d = <=-to-<=' pf2
+<=-multiplicative {a} {b} {c} {d} pf1 pf2 = let
+  sigma x a*x==b = <=-add-get pf1
+  sigma y c*y==d = <=-add-get pf2
   witness = (a * y) + ((x * c) + (x * y))
   -- Steps needed to prove equality
   step1 = add-assoc (a * c) (a * y) ((x * c) + (x * y)) 
@@ -395,44 +482,80 @@ not->=-to-< {succ a} {succ b} neg = <succ (not->=-to-< (λ (pf : b <= a) -> neg 
   eq =
     begin
       (a * c) + ((a * y) + ((x * c) + (x * y)))
-    ==< step1 >
+    ==[ step1 ]
       ((a * c) + (a * y)) + ((x * c) + (x * y))
-    ==< step2 >
+    ==[ step2 ]
       (a * (c + y)) + ((x * c) + (x * y))
-    ==< step3 >
+    ==[ step3 ]
       (a * (c + y)) + (x  * (c + y))
-    ==< step4 >
+    ==[ step4 ]
       (a + x) * (c + y)
-    ==< step5 >
+    ==[ step5 ]
       b * (c + y)
-    ==< step6 >
+    ==[ step6 ]
       b * d
     qed
-  in <='-to-<= (sigma witness eq)
+  in <=-add witness eq
 
-<-cong-+ : ∀ {a b c d}
+<=-cong-mul-r : ∀ {a b} (c : Nat) → a <= b → (a * c) <= (b * c)
+<=-cong-mul-r c pf = <=-multiplicative pf (<=-refl' {c})
+
+<=-cong-mul-l : ∀ {a b} (c : Nat) → a <= b → (c * a) <= (c * b)
+<=-cong-mul-l c pf = <=-multiplicative (<=-refl' {c}) pf
+
+<-additive : ∀ {a b c d}
           → a < b
           → c <= d
           --------------------
           → (a + c) < (b + d)
-<-cong-+ {a} {b} {c} {d} pf1 pf2 = let
-  sigma x 1+a+x==b = <-to-<' pf1
-  sigma y c+y==d = <=-to-<=' pf2
+<-additive {a} {b} {c} {d} pf1 pf2 = let
+  sigma x 1+a+x==b = <-add-get pf1
+  sigma y c+y==d = <=-add-get pf2
   eq =
     begin
       succ ((a + c) + (x + y))
-    ==< cong succ (add-inner-swap a c x y) >
+    ==[ cong succ (add-inner-swap a c x y) ]
       succ ((a + x) + (c + y))
-    ==< cong (_+ (c + y)) 1+a+x==b >
+    ==[ cong (_+ (c + y)) 1+a+x==b ]
       b + (c + y)
-    ==< cong (b +_) c+y==d >
+    ==[ cong (b +_) c+y==d ]
       b + d
     qed
-  in <'-to-< (sigma (x + y) eq)
+  in <-add (x + y) eq
 
-<-cong-+' : ∀ {a b c d}
+<-additive' : ∀ {a b c d}
           → a <= b
           → c < d
           --------------------
           → (a + c) < (b + d)
-<-cong-+' {a} {b} {c} {d} pf1 pf2 = rwt (λ x -> (a + c) < x) (add-comm d b) (rwt (λ x -> x < (d + b)) (add-comm c a) (<-cong-+ pf2 pf1))
+<-additive' {a} {b} {c} {d} pf1 pf2 = rwt (λ x -> (a + c) < x) (add-comm d b) (rwt (λ x -> x < (d + b)) (add-comm c a) (<-additive pf2 pf1))
+
+<=fct0   : ∀ {a b c0 c1 d} → c0 <= c1 → a <= (b + (c0 * d)) → a <= (b + (c1 * d))
+<=fct0 {a} {b} {c0} {c1} {d} pf1 pf2 =
+  begin<= 
+    a
+  <=[ pf2 ]
+    b + (c0 * d)
+  <=[ <=-cong-add-l b (<=-cong-mul-r d pf1) ]
+    b + (c1 * d)
+  qed<=
+
+<=fct1   : ∀ {a b0 b1 c} → b0 <= b1 → a <= (b0 + c) → a <= (b1 + c)
+<=fct1 {a} {b0} {b1} {c} pf1 pf2 =
+  begin<= 
+    a
+  <=[ pf2 ]
+    b0 + c
+  <=[ <=-cong-add-r c pf1 ]
+    b1 + c
+  qed<=
+
+<=fct2   : ∀ {a b c0 c1} → c0 <= c1 → a <= (b + c0) → a <= (b + c1)
+<=fct2 {a} {b} {c0} {c1} pf1 pf2 =
+  begin<= 
+    a
+  <=[ pf2 ]
+    b + c0
+  <=[ <=-cong-add-l b pf1 ]
+    b + c1
+  qed<=
