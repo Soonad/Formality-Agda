@@ -294,21 +294,6 @@ succ-strict (<=succ pf) = pf
 <=-bottom : {a : Nat} -> a <= 0 -> a == 0
 <=-bottom {0} (<=zero 0) = refl
 
-<=-incr-r : ∀ {a b} → (x : Nat) → a <= b → a <= (b + x)
-<=-incr-r {a} {b} x pf =
-  let (sigma y eq) = <=-add-get pf
-  in <=-add (y + x)
-    (begin
-      a + (y + x)
-    ==[ (add-assoc a y x) ]
-      (a + y) + x
-    ==[ (cong (_+ x) eq) ]
-      b + x
-    qed)
-
-<=-incr-l : ∀ {a b} → (x : Nat) → a <= b → a <= (x + b)
-<=-incr-l {a} {b} x pf = rwt (λ X -> a <= X) (add-comm b x) (<=-incr-r x pf)
-
 -- Less-than-or-equal-to Reasoning
 infix  1 begin<=_
 infixr 2 _<=[_]_
@@ -341,18 +326,29 @@ n-<-succ : {n : Nat} -> n < succ(n)
 n-<-succ {0} = <zero 0
 n-<-succ {succ n} = <succ n-<-succ
 
+not-n-<-0 : {n : Nat} -> n < 0 -> Empty
+not-n-<-0 ()
+
 <-to-<= : {a b : Nat} -> a < b -> (succ a) <= b
 <-to-<= {0} {(succ b)} (<zero b) = <=succ (<=zero b)
 <-to-<= {succ a} {succ b} (<succ pf) = <=succ (<-to-<= pf)
+
+<-to-<=' : {a b : Nat} -> a < (succ b) -> a <= b
+<-to-<=' {0} {b} (<zero b) = <=zero b
+<-to-<=' {succ a} {succ b} (<succ pf) = <=succ (<-to-<=' pf)
 
 <=-to-< : {a b : Nat} -> (succ a) <= b -> a < b
 <=-to-< {zero} {succ b} _ = <zero b
 <=-to-< {succ a} {succ b} (<=succ pf) = <succ (<=-to-< pf)
 
-<=-is-<-or-== : (a b : Nat) -> a <= b -> Or (a < b) (a == b)
-<=-is-<-or-== zero zero _ = or1 refl
-<=-is-<-or-== zero (succ b) _ = or0 (<zero b)
-<=-is-<-or-== (succ a) (succ b) (<=succ pf) = case-or (<=-is-<-or-== a b pf) (λ x -> or0 (<succ x)) (λ x -> or1 (cong succ x))
+<=-to-<' : {a b : Nat} -> a <= b -> a < (succ b)
+<=-to-<' {zero} {b} _ = <zero b
+<=-to-<' {succ a} {succ b} (<=succ pf) = <succ (<=-to-<' pf)
+
+<=-is-<-or-== : {a b : Nat} -> a <= b -> Or (a < b) (a == b)
+<=-is-<-or-== {zero}   {zero}   _           = or1 refl
+<=-is-<-or-== {zero}   {succ b} _           = or0 (<zero b)
+<=-is-<-or-== {succ a} {succ b} (<=succ pf) = case-or (<=-is-<-or-== pf) (λ x -> or0 (<succ x)) (λ x -> or1 (cong succ x))
 
 <-stronger-<= : {a b : Nat} -> a < b -> a <= b
 <-stronger-<= {0} {(succ b)} (<zero b) = <=zero (succ b)
@@ -463,6 +459,12 @@ x qed<  =  <=-refl'
 <=-cong-add-l : ∀ {a b} (c : Nat) → a <= b → (c + a) <= (c + b)
 <=-cong-add-l c pf = <=-additive (<=-refl' {c}) pf
 
+<=-incr-r : ∀ {a b} → (x : Nat) → a <= b → a <= (b + x)
+<=-incr-r {a} {b} x pf = rwt (_<= (b + x)) (add-n-0 a) (<=-additive pf (<=zero x))
+
+<=-incr-l : ∀ {a b} → (x : Nat) → a <= b → a <= (x + b)
+<=-incr-l {a} {b} x pf = <=-additive (<=zero x) pf
+
 <=-multiplicative : ∀ {a b c d}
           → a <= b
           → c <= d
@@ -528,7 +530,7 @@ x qed<  =  <=-refl'
           → c < d
           --------------------
           → (a + c) < (b + d)
-<-additive' {a} {b} {c} {d} pf1 pf2 = rwt (λ x -> (a + c) < x) (add-comm d b) (rwt (λ x -> x < (d + b)) (add-comm c a) (<-additive pf2 pf1))
+<-additive' {a} {b} {c} {d} pf1 pf2 = rwt ((a + c) <_) (add-comm d b) (rwt (_< (d + b)) (add-comm c a) (<-additive pf2 pf1))
 
 <=fct0   : ∀ {a b c0 c1 d} → c0 <= c1 → a <= (b + (c0 * d)) → a <= (b + (c1 * d))
 <=fct0 {a} {b} {c0} {c1} {d} pf1 pf2 =
@@ -559,3 +561,31 @@ x qed<  =  <=-refl'
   <=[ <=-cong-add-l b pf1 ]
     b + c1
   qed<=
+
+-- Strong induction
+<=-induction-lemma : {P : Nat -> Set}
+                  -> P 0
+                  -> ((n : Nat) -> ((m : Nat) -> m <= n -> P m) -> P (succ n))
+                  ----------------------------------
+                  -> ((n m : Nat) -> m <= n -> P m)
+<=-induction-lemma {P} base step 0 m m<=n = rwt P (sym (<=-bottom m<=n)) base
+<=-induction-lemma {P} base step (succ n) m m<=1+n =
+  case-or (<=-is-<-or-== m<=1+n)
+  (λ m<1+n -> <=-induction-lemma base step n m (<-to-<=' m<1+n))
+  (λ m==1+n -> rwt P (sym m==1+n) (step n (<=-induction-lemma base step n)))
+
+<=-induction : {P : Nat -> Set}
+            -> P 0
+            -> ((n : Nat) -> ((m : Nat) -> m <= n -> P m) -> P (succ n))
+            ----------------------------------
+            -> (n : Nat) -> P n
+<=-induction base step n = <=-induction-lemma base step n n <=-refl'
+
+<-induction : {P : Nat -> Set}
+            -> ((n : Nat) -> ((m : Nat) -> m < n -> P m) -> P n)
+            ----------------------------------
+            -> (n : Nat) -> P n
+<-induction <-step = let
+  base = <-step 0 (λ n n<0 -> absurd (not-n-<-0 n<0))
+  step = λ n pf -> <-step (succ n) (λ m m<1+n -> pf m (<-to-<=' m<1+n))
+  in <=-induction base step
