@@ -62,6 +62,8 @@ at zero     term (succ i) = var i
 at (succ n) term zero     = var zero
 at (succ n) term (succ i) = shift succ (at n term i)
 
+test = subst (at 1 (app (lam (var 0)) (lam (var 0)))) (lam (lam (var 3)))
+
 -- Performs a global reduction of all current redexes
 reduce : Term -> Term
 reduce (var i)             = var i
@@ -84,36 +86,33 @@ size (lam bod)     = succ (size bod)
 size (app fun arg) = succ (size fun + size arg)
 
 -- This term is affine
-IsAffine : (t : Term) → Set
-IsAffine (var idx)     = Unit
-IsAffine (lam bod)     = And (Or (uses bod 0 == 0) (uses bod 0 == 1)) (IsAffine bod)
-IsAffine (app fun arg) = And (IsAffine fun) (IsAffine arg)
+data IsAffine : (t : Term) → Set where
+  var-affine : ∀ {a} → IsAffine (var a)
+  lam-affine : ∀ {bod} → (uses bod 0 <= 1) → IsAffine bod -> IsAffine (lam bod)
+  app-affine : ∀ {fun arg} → IsAffine fun → IsAffine arg -> IsAffine (app fun arg)
 
 -- This term is on normal form
-IsNormal : (t : Term) → Set
-IsNormal (var idx)                 = Unit
-IsNormal (lam bod)                 = IsNormal bod
-IsNormal (app (var fidx)      arg) = And (IsNormal (var fidx)) (IsNormal arg)
-IsNormal (app (lam fbod)      arg) = Empty
-IsNormal (app (app ffun farg) arg) = And (IsNormal (app ffun farg)) (IsNormal arg)
+data IsNormal : (t : Term) → Set where
+  var-normal : ∀ a → IsNormal (var a)
+  lam-normal : ∀ bod → IsNormal bod -> IsNormal (lam bod)
+  app-var-normal : ∀ {fidx arg} → IsNormal arg -> IsNormal (app (var fidx) arg)
+  app-app-normal : ∀ {ffun farg arg} → IsNormal (app ffun farg) → IsNormal arg -> IsNormal (app (app ffun farg) arg)
 
 -- This term has redexes
-HasRedex : (t : Term) → Set
-HasRedex (var idx)                 = Empty
-HasRedex (lam bod)                 = HasRedex bod
-HasRedex (app (var fidx)      arg) = Or (HasRedex (var fidx)) (HasRedex arg)
-HasRedex (app (lam fbod)      arg) = Unit
-HasRedex (app (app ffun farg) arg) = Or (HasRedex (app ffun farg)) (HasRedex arg)
+data HasRedex : (t : Term) → Set where
+  lam-redex : ∀ bod → HasRedex bod -> HasRedex (lam bod)
+  app-redex : ∀ {fun arg} → Or (HasRedex fun) (HasRedex arg) -> HasRedex (app fun arg)
+  found-redex : ∀ {fbod arg} → HasRedex (app (lam fbod) arg)
 
 -- Computes the number of redexes in a term
 redexes : (t : Term) → Nat
 redexes (var idx)                 = 0
 redexes (lam bod)                 = redexes bod
-redexes (app (var fidx)      arg) = redexes (var fidx) + redexes arg
-redexes (app (lam fbod)      arg) = 1 + (redexes (lam fbod) + redexes arg)
+redexes (app (var fidx)      arg) = redexes arg
+redexes (app (lam fbod)      arg) = 1 + (redexes fbod + redexes arg)
 redexes (app (app ffun farg) arg) = redexes (app ffun farg) + redexes arg
 
--- Directed reduction relation, `a ~> b` means term `a` reduces to `b`
+-- Directed one step reduction relation, `a ~> b` means term `a` reduces to `b` in one step
 data _~>_ : Term → Term → Set where
   ~beta : ∀ {t u} → app (lam t) u ~> subst (at 0 u) t
   ~app0 : ∀ {f0 f1 a} → f0 ~> f1 → app f0 a ~> app f1 a
@@ -188,80 +187,85 @@ postulate
 
 -- Reducing an affine term either reduces its size or keeps it the same
 reduce<= : (t : Term) → IsAffine t → size (reduce t) <= size t
-reduce<= (var idx) af = <=zero zero
-reduce<= (lam bod) af = <=succ (reduce<= bod (snd af))
-reduce<= (app (var fidx) arg) af = <=succ (reduce<= arg (snd af)) 
-reduce<= (app (app ffun farg) arg) af =
-  let a = reduce<= (app ffun farg) (fst af)
-      b = reduce<= arg (snd af)
-      c = <=-additive a b
-  in  <=succ c
-reduce<= (app (lam fbod) arg) af =
-  let a = reduce<= fbod (snd (fst af))
-      b = reduce<= arg (snd af)
-      c = size-after-subst 0 (reduce fbod) (reduce arg)
-      d = <=-refl c
-      e = reduce-uses 0 fbod (snd (fst af))
-      f = <=fct0 e d
-  in  case fst (fst af) of λ
-      { (or0 o0) →
-        let g = rwt (λ x → size (subst (at 0 (reduce arg)) (reduce fbod)) <= (size (reduce fbod) + (x * size (reduce arg)))) o0 f
-            h = rwt (λ x → size (subst (at 0 (reduce arg)) (reduce fbod)) <= x) (add-n-0 (size (reduce fbod))) g
-            i = <=-trans h a
-            j = <=-incr-r (size arg) i
-            k = <=-incr-l 1 (<=-incr-l 1 j)
-        in k
-      ; (or1 o1) →
-        let g = rwt (λ x → size (subst (at 0 (reduce arg)) (reduce fbod)) <= (size (reduce fbod) + (x * size (reduce arg)))) o1 f
-            h = rwt (λ x → size (subst (at 0 (reduce arg)) (reduce fbod)) <= (size (reduce fbod) + x)) (add-n-0 (size (reduce arg))) g
-            i = <=fct1 a h
-            j = <=fct2 b i
-            k = <=-incr-l 1 (<=-incr-l 1 j)
-        in  k
-      }
+reduce<= (var idx) _ = <=zero zero
+reduce<= (lam bod) (lam-affine _ af) = <=succ (reduce<= bod af)
+reduce<= (app (var fidx) arg) (app-affine _ af) = <=succ (reduce<= arg af) 
+reduce<= (app (app ffun farg) arg) (app-affine af-fun af-arg) = <=succ (<=-additive (reduce<= (app ffun farg) af-fun) (reduce<= arg af-arg))
+reduce<= (app (lam fbod) arg) (app-affine (lam-affine leq af-bod) af-arg) =
+  let step1 = <=-refl (size-after-subst 0 (reduce fbod) (reduce arg))
+      step2 = <=-cong-add-r (uses (reduce fbod) 0 * size (reduce arg)) (reduce<= fbod af-bod)
+      step3 = <=-cong-add-l (size fbod) (<=-cong-mul-l (uses (reduce fbod) 0) (reduce<= arg af-arg))
+      step4 = <=-cong-add-l (size fbod) (<=-cong-mul-r (size arg) (reduce-uses 0 fbod af-bod))
+      step5 = <=-cong-add-l (size fbod) (<=-cong-mul-r (size arg) leq)
+      step6 = <=-cong-add-l (size fbod) (<=-refl (add-n-0 (size arg)))
+      step7 = <=-incr-l 2 <=-refl'
+  in
+  begin<= 
+    size (reduce (app (lam fbod) arg))
+  <=[ <=-refl' ]
+    size (subst (at 0 (reduce arg)) (reduce fbod))
+  <=[ step1 ]
+    size (reduce fbod) + (uses (reduce fbod) 0 * size (reduce arg))
+  <=[ step2 ]
+    size fbod + (uses (reduce fbod) 0 * size (reduce arg))
+  <=[ step3 ]
+    size fbod + (uses (reduce fbod) 0 * size arg)
+  <=[ step4 ]
+    size fbod + (uses fbod 0 * size arg)
+  <=[ step5 ]
+    size fbod + (1 * size arg)
+  <=[ step6 ]
+    size fbod + size arg
+  <=[ step7 ]
+    succ (succ (size fbod + size arg))
+  <=[ <=-refl' ]
+    size (app (lam fbod) arg)
+  qed<=
 
 -- Reducing an affine term with redexes reduces its size
--- TODO: this is basically a ctrl+c of the function above with small
--- modifications. Clearly my Agda skills are still needing improvements. How
--- could this be better abstracted?
 reduce< : (t : Term) → IsAffine t → HasRedex t → size (reduce t) < size t
-reduce< (var idx) af ()
-reduce< (lam bod) af hr = <succ (reduce< bod (snd af) hr)
-reduce< (app (var fidx) arg) af (or0 ())
-reduce< (app (var fidx) arg) af (or1 o1) = <succ (reduce< arg (snd af) o1)
-reduce< (app (app ffun farg) arg) af (or0 o0) =
-  let a = reduce< (app ffun farg) (fst af) o0
-      b = reduce<= arg (snd af)
-      c = <-additive a b
-  in  <succ c
-reduce< (app (app ffun farg) arg) af (or1 o1) =
-  let a = reduce<= (app ffun farg) (fst af)
-      b = reduce< arg (snd af) o1
+reduce< (var idx) _ ()
+reduce< (lam bod) (lam-affine _ af) (lam-redex _ hr) = <succ (reduce< bod af hr)
+reduce< (app (var fidx) arg) (app-affine _ af) (app-redex (or1 o1)) = <succ (reduce< arg af o1)
+reduce< (app (app ffun farg) arg) (app-affine leq af) (app-redex (or0 o0)) =
+  <succ (<-additive (reduce< (app ffun farg) leq o0) (reduce<= arg af))
+reduce< (app (app ffun farg) arg) (app-affine leq af) (app-redex (or1 o1)) =
+  let a = reduce<= (app ffun farg) leq
+      b = reduce< arg af o1
       c = <-additive' a b
   in  <succ c
-reduce< (app (lam fbod) arg) af unit =
-  let a = reduce<= fbod (snd (fst af))
-      b = reduce<= arg (snd af)
-      c = size-after-subst 0 (reduce fbod) (reduce arg)
-      d = <=-refl c
-      e = reduce-uses 0 fbod (snd (fst af))
-      f = <=fct0 e d
-  in  case fst (fst af) of λ
-      { (or0 o0) →
-        let g = rwt (λ x → size (subst (at 0 (reduce arg)) (reduce fbod)) <= (size (reduce fbod) + (x * size (reduce arg)))) o0 f
-            h = rwt (λ x → size (subst (at 0 (reduce arg)) (reduce fbod)) <= x) (add-n-0 (size (reduce fbod))) g
-            i = <=-trans h a
-            j = <=-incr-r (size arg) i
-            k = <=-incr-l 1 j
-        in <=-to-< (<=succ k)
-      ; (or1 o1) →
-        let g = rwt (λ x → size (subst (at 0 (reduce arg)) (reduce fbod)) <= (size (reduce fbod) + (x * size (reduce arg)))) o1 f
-            h = rwt (λ x → size (subst (at 0 (reduce arg)) (reduce fbod)) <= (size (reduce fbod) + x)) (add-n-0 (size (reduce arg))) g
-            i = <=fct1 a h
-            j = <=fct2 b i
-            k = (<=-incr-l 1 j)
-        in <=-to-< (<=succ k)
-      }
+reduce< (app (lam fbod) arg) (app-affine (lam-affine leq af-bod) af-arg) foundredex =
+  let step1 = <=-refl (size-after-subst 0 (reduce fbod) (reduce arg))
+      step2 = <=-cong-add-r (uses (reduce fbod) 0 * size (reduce arg)) (reduce<= fbod af-bod)
+      step3 = <=-cong-add-l (size fbod) (<=-cong-mul-l (uses (reduce fbod) 0) (reduce<= arg af-arg))
+      step4 = <=-cong-add-l (size fbod) (<=-cong-mul-r (size arg) (reduce-uses 0 fbod af-bod))
+      step5 = <=-cong-add-l (size fbod) (<=-cong-mul-r (size arg) leq)
+      step6 = <=-cong-add-l (size fbod) (<=-refl (add-n-0 (size arg)))
+      step7 = <=-incr-l 1 <=-refl'
+  in
+  begin< 
+    size (reduce (app (lam fbod) arg))
+  <='[ <=-refl' ]
+    size (subst (at 0 (reduce arg)) (reduce fbod))
+  <='[ step1 ]
+    size (reduce fbod) + (uses (reduce fbod) 0 * size (reduce arg))
+  <='[ step2 ]
+    size fbod + (uses (reduce fbod) 0 * size (reduce arg))
+  <='[ step3 ]
+    size fbod + (uses (reduce fbod) 0 * size arg)
+  <='[ step4 ]
+    size fbod + (uses fbod 0 * size arg)
+  <='[ step5 ]
+    size fbod + (1 * size arg)
+  <='[ step6 ]
+    size fbod + size arg
+  <[ n-<-succ  ]
+    succ (size fbod + size arg)
+  <=[ step7  ]
+    succ (succ (size fbod + size arg))
+  <=[ <=-refl' ]
+    size (app (lam fbod) arg)
+  qed<
 
 -- :::::::::::
 -- :: Tests ::

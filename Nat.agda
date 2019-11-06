@@ -404,7 +404,7 @@ not->=-to-< {succ a} {succ b} neg = <succ (not->=-to-< (λ (pf : b <= a) -> neg 
 
 -- Less-than Reasoning: requires proving only one < statement in the whole reasoning chain. The rest can be proven by weaker <= statements
 infix  1 begin<_
-infixr 2 _<[_]_
+infixr 2 _<[_]_ _<='[_]_
 infix  3 _qed<
 
 begin<_ : ∀ {x y : Nat}
