@@ -87,6 +87,10 @@ uses-step {i} {n} with ==dec i n
 uses-step {i} {n} | or0 _ = refl
 uses-step {i} {n} | or1 _ = refl
 
+uses-n-step : {i n : Nat} -> (p : Nat) -> uses (var (p + i)) (p + n) == uses (var i) n
+uses-n-step 0 = refl
+uses-n-step (succ p) = trans uses-step (uses-n-step p)
+
 -- Computes the size of a term
 size : Term -> Nat
 size (var i)       = 0
@@ -131,13 +135,21 @@ data _~>_ : Term → Term → Set where
 -- :: Theorems ::
 -- ::::::::::::::
 
-shift-lemma1 : (n m : Nat) → m <= n → shift-fn-many m succ n == succ n
-shift-lemma1 n 0 _ = refl
-shift-lemma1 (succ n) (succ m) (<=succ lte) = cong succ (shift-lemma1 n m lte)
+shift-lemma1 : (n m p : Nat) → m <= n → shift-fn-many m (p +_) n == (p + n)
+shift-lemma1 n 0 p _ = refl
+shift-lemma1 (succ n) (succ m) 0 (<=succ lte) = cong succ (shift-lemma1 n m 0 lte)
+shift-lemma1 (succ n) (succ m) (succ p) (<=succ lte) =
+  begin
+    succ (shift-fn-many m (succ p +_) n)
+  ==[ cong succ (shift-lemma1 n m (succ p) lte) ]
+    succ (succ (p + n))
+  ==[ sym (add-n-succ (succ p) n) ]
+    (succ p + succ n)
+  qed
 
-shift-lemma2 : (n m : Nat) → (succ n) <= m → shift-fn-many m succ n == n
-shift-lemma2 0 (succ m) (<=succ lte) = refl
-shift-lemma2 (succ n) (succ m) (<=succ lte) = cong succ (shift-lemma2 n m lte)
+shift-lemma2 : (n m p : Nat) → (succ n) <= m → shift-fn-many m (p +_) n == n
+shift-lemma2 0 (succ m) p (<=succ lte) = refl
+shift-lemma2 (succ n) (succ m) p (<=succ lte) = cong succ (shift-lemma2 n m p lte)
 
 -- Shifting a term doesn't affect its size
 shift-preserves-size : ∀ fn term → size (shift fn term) == size term
@@ -202,36 +214,67 @@ uses-lemma idx (succ n) leq with ==dec idx (succ n)
 uses-lemma idx (succ n) leq | or1 _ = refl
 uses-lemma idx (succ n) (<=succ leq) | or0 eq = absurd (rwt (λ x → Not (x <= n)) (sym eq) (<-to-not->= (n-<-succ {n})) leq)
 
-uses-succ-lemma : (term : Term) → (n m : Nat) → m <= n → uses (shift (shift-fn-many m succ) term) (succ n) == uses term n
-uses-succ-lemma (var idx) n 0 _ = uses-step
-uses-succ-lemma (var idx) (succ n) (succ m) (<=succ m<=n) with <=-total (succ m) idx
-uses-succ-lemma (var idx) (succ n) (succ m) (<=succ m<=n) | or0 1+m<=idx  = trans (cong (λ x → uses (var x) (succ (succ n))) (shift-lemma1 idx (succ m) 1+m<=idx)) uses-step
-uses-succ-lemma (var idx) (succ n) (succ m) (<=succ m<=n) | or1 (<=succ idx<=m) =
-  let idx<=n = <=-trans idx<=m m<=n
-      p = <=succ idx<=n
-      p' = <=-incr-l 1 p
-  in
+uses-add-lemma : (term : Term) → (n m p : Nat) → m <= n → uses (shift (shift-fn-many m (p +_)) term) (p + n) == uses term n
+uses-add-lemma (var idx) n 0 0 _ = refl
+uses-add-lemma (var idx) n 0 (succ p) _ =
+    uses (var (succ p + idx)) (succ p + n) 
+  ==[]
+    uses (var (succ p + idx)) (succ p + n) 
+  ==[ uses-step ]
+    uses (var (p + idx)) (p + n)
+  ==[ uses-add-lemma (var idx) n 0 p (<=zero n) ]
+    uses (var idx) n
+  qed
+uses-add-lemma (var idx) (succ n) (succ m) p (<=succ m<=n) with <=-total (succ m) idx
+uses-add-lemma (var idx) (succ n) (succ m) p (<=succ m<=n) | or0 1+m<=idx  = -- trans (cong (λ x → uses (var x) (succ (succ n))) (shift-lemma1 idx (succ m) 1+m<=idx)) uses-step
   begin
-    uses (var (shift-fn-many (succ m) succ idx)) (succ (succ n))
-  ==[ cong (λ x → uses (var x) (succ (succ n))) (shift-lemma2 idx (succ m) (<=succ idx<=m)) ]
-    uses (var idx) (succ (succ n))
-  ==[ uses-lemma idx (succ (succ n)) p' ]
-    0
-  ==[ sym (uses-lemma idx (succ n) p) ]
+    uses (shift (shift-fn-many (succ m) (p +_)) (var idx)) (p + succ n)
+  ==[]
+    uses (var (shift-fn-many (succ m) (p +_) idx)) (p + succ n)
+  ==[ cong (λ x → uses (var x) (p + succ n)) (shift-lemma1 idx (succ m) p 1+m<=idx) ]
+    uses (var (p + idx)) (p + succ n)
+  ==[ uses-n-step p ]
     uses (var idx) (succ n)
   qed
-uses-succ-lemma (app fun arg) n m leq =
- begin
-   uses (shift (shift-fn-many m succ) fun) (succ n) + uses (shift (shift-fn-many m succ) arg) (succ n)
- ==[ cong (_+ uses (shift (shift-fn-many m succ) arg) (succ n)) (uses-succ-lemma fun n m leq)  ]
-   uses fun n + uses (shift (shift-fn-many m succ) arg) (succ n)
- ==[ cong (uses fun n +_) (uses-succ-lemma arg n m leq)  ]
-   uses (app fun arg) n
-   qed
-uses-succ-lemma (lam bod) n m leq = uses-succ-lemma bod (succ n) (succ m) (<=succ leq)
+uses-add-lemma (var idx) (succ n) (succ m) p (<=succ m<=n) | or1 (<=succ idx<=m) =
+  let idx<=n = <=-trans idx<=m m<=n
+      q = <=succ idx<=n
+      q' = <=-incr-l p q
+  in
+    begin
+    uses (var (shift-fn-many (succ m) (_+_ p) idx)) (p + succ n)
+  ==[ cong (λ x → uses (var x) (p + succ n)) (shift-lemma2 idx (succ m) p (<=succ idx<=m)) ]
+    uses (var idx) (p + succ n)
+  ==[ uses-lemma idx (p + succ n) q' ]
+    0
+  ==[ sym (uses-lemma idx (succ n) q) ]
+    uses (var idx) (succ n)
+  qed
+uses-add-lemma (app fun arg) n m p leq =
+  begin
+    uses (shift (shift-fn-many m (p +_)) (app fun arg)) (p + n)
+  ==[]
+    uses (shift (shift-fn-many m (p +_)) fun) (p + n) + uses (shift (shift-fn-many m (p +_)) arg) (p + n)
+  ==[ cong (_+ uses (shift (shift-fn-many m (p +_)) arg) (p + n)) (uses-add-lemma fun n m p leq)  ]
+    uses fun n + uses (shift (shift-fn-many m (p +_)) arg) (p + n)
+  ==[ cong (uses fun n +_) (uses-add-lemma arg n m p leq)  ]
+    uses (app fun arg) n
+    qed
+uses-add-lemma (lam bod) n m p leq =
+  begin
+    uses (shift (shift-fn-many m (p +_)) (lam bod)) (p + n)
+  ==[]
+    uses (shift (shift-fn-many (succ m) (p +_)) bod) (succ p + n)
+  ==[ cong (λ x → uses (shift (shift-fn-many (succ m) (p +_)) bod) x) (sym (add-n-succ p n)) ]
+    uses (shift (shift-fn-many (succ m) (p +_)) bod) (p + succ n)
+  ==[ uses-add-lemma bod (succ n) (succ m) p (<=succ leq) ]
+    uses bod (succ n)
+  ==[]
+    uses (lam bod) n
+  qed
 
-uses-succ : (term : Term) → (n : Nat) → uses (shift succ term) (succ n) == uses term n
-uses-succ term n = uses-succ-lemma term n 0 (<=zero n)
+uses-add : (term : Term) → (n p : Nat) → uses (shift (p +_) term) (p + n) == uses term n
+uses-add term n p = uses-add-lemma term n 0 p (<=zero n)
 
 postulate
   reduce-uses-lemma : (n : Nat) → (arg bod : Term) → IsAffine (lam bod) → (uses (subst (at 0 arg) bod) n) <= (uses bod (succ n) + uses arg n)
