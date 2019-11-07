@@ -532,36 +532,6 @@ x qed<  =  <=-refl'
           → (a + c) < (b + d)
 <-additive' {a} {b} {c} {d} pf1 pf2 = rwt ((a + c) <_) (add-comm d b) (rwt (_< (d + b)) (add-comm c a) (<-additive pf2 pf1))
 
-<=fct0   : ∀ {a b c0 c1 d} → c0 <= c1 → a <= (b + (c0 * d)) → a <= (b + (c1 * d))
-<=fct0 {a} {b} {c0} {c1} {d} pf1 pf2 =
-  begin<= 
-    a
-  <=[ pf2 ]
-    b + (c0 * d)
-  <=[ <=-cong-add-l b (<=-cong-mul-r d pf1) ]
-    b + (c1 * d)
-  qed<=
-
-<=fct1   : ∀ {a b0 b1 c} → b0 <= b1 → a <= (b0 + c) → a <= (b1 + c)
-<=fct1 {a} {b0} {b1} {c} pf1 pf2 =
-  begin<= 
-    a
-  <=[ pf2 ]
-    b0 + c
-  <=[ <=-cong-add-r c pf1 ]
-    b1 + c
-  qed<=
-
-<=fct2   : ∀ {a b c0 c1} → c0 <= c1 → a <= (b + c0) → a <= (b + c1)
-<=fct2 {a} {b} {c0} {c1} pf1 pf2 =
-  begin<= 
-    a
-  <=[ pf2 ]
-    b + c0
-  <=[ <=-cong-add-l b pf1 ]
-    b + c1
-  qed<=
-
 -- Strong induction
 <=-induction-lemma : {P : Nat -> Set}
                   -> P 0

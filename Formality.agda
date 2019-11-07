@@ -6,6 +6,7 @@ module Formality where
 open import Logic
 open import Nat
 open import Equality
+open import EquationalReasoning
 
 -- This enables the "case-of idiom", which isn't built-in
 case_of_ : ∀ {a b} {A : Set a} {B : Set b} → A → (A → B) → B
@@ -59,17 +60,15 @@ subst fn (app fun arg) = app (subst fn fun) (subst fn arg)
 at : Nat → Term → Nat → Term
 at zero     term zero     = term
 at zero     term (succ i) = var i
-at (succ n) term zero     = var zero
-at (succ n) term (succ i) = shift succ (at n term i)
-
-test = subst (at 1 (app (lam (var 0)) (lam (var 0)))) (lam (lam (var 3)))
+at (succ n) term = subst-fn (at n term)
 
 -- Performs a global reduction of all current redexes
 reduce : Term -> Term
 reduce (var i)             = var i
 reduce (lam bod)           = lam (reduce bod)
+reduce (app (var idx) arg)       = app (var idx) (reduce arg)
 reduce (app (lam bod) arg) = subst (at zero (reduce arg)) (reduce bod)
-reduce (app fun arg)       = app (reduce fun) (reduce arg)
+reduce (app (app ffun farg) arg)       = app (reduce (app ffun farg)) (reduce arg)
 
 -- Computes how many times a free variable is used
 uses : Term -> Nat -> Nat
@@ -182,8 +181,43 @@ size-after-subst n (app bfun barg) arg =
   in  cong succ i
 
 postulate
-  -- Reducing an affine term can't incrase the amount of times a free variable is used
-  reduce-uses : (n : Nat) → (t : Term) → IsAffine t → uses (reduce t) n <= uses t n
+  reduce-uses-lemma : (n : Nat) → (arg bod : Term) → IsAffine (lam bod) → (uses (subst (at 0 arg) bod) n) <= (uses bod (succ n) + uses arg n)
+  reduce-affine : (t : Term) → IsAffine t → IsAffine (reduce t)
+
+reduce-uses : (n : Nat) → (t : Term) → IsAffine t → uses (reduce t) n <= uses t n
+reduce-uses n (var idx) _ = <=-refl'
+reduce-uses n (lam bod) (lam-affine _ af) = reduce-uses (succ n) bod af
+reduce-uses n (app (var idx) arg) (app-affine _ af) = <=-cong-add-l (uses (var idx) n) (reduce-uses n arg af)
+reduce-uses n (app (app ffun farg) arg) (app-affine (app-affine ffun-af farg-af) arg-af) =
+  let pf1 = reduce-uses n (app ffun farg) (app-affine ffun-af farg-af)
+      pf2 = reduce-uses n arg arg-af
+  in
+  begin<=
+    uses (reduce (app (app ffun farg) arg)) n
+  <=[ <=-refl' ]
+    uses (app (reduce (app ffun farg)) (reduce arg)) n
+  <=[ <=-refl' ]
+    uses (reduce (app ffun farg)) n + uses (reduce arg) n
+  <=[ <=-additive pf1 pf2 ]
+    uses (app ffun farg) n + uses arg n
+  <=[ <=-refl' ]
+    uses (app (app ffun farg) arg) n
+  qed<=
+reduce-uses n (app (lam bod) arg) (app-affine (lam-affine eq bod-af) arg-af) =
+  let pf1 = reduce-uses n (lam bod) (lam-affine eq bod-af)
+      pf2 = reduce-uses n arg arg-af
+  in
+  begin<=
+    uses (reduce (app (lam bod) arg)) n
+  <=[ <=-refl' ]
+    uses (subst (at zero (reduce arg)) (reduce bod)) n
+  <=[ reduce-uses-lemma n (reduce arg) (reduce bod) (reduce-affine (lam bod) (lam-affine eq bod-af)) ]
+     uses (reduce bod) (succ n) + uses (reduce arg) n
+  <=[ <=-additive pf1 pf2 ]
+    uses bod (succ n) + uses arg n
+  <=[ <=-refl' ]
+    uses (app (lam bod) arg) n
+  qed<=
 
 -- Reducing an affine term either reduces its size or keeps it the same
 reduce<= : (t : Term) → IsAffine t → size (reduce t) <= size t
