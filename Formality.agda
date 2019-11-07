@@ -39,6 +39,10 @@ shift-fn : (Nat -> Nat) -> Nat -> Nat
 shift-fn fn zero     = zero
 shift-fn fn (succ i) = succ (fn i)
 
+shift-fn-many : Nat -> (Nat -> Nat) -> Nat -> Nat
+shift-fn-many 0 fn = fn
+shift-fn-many (succ n) fn = shift-fn (shift-fn-many n fn)
+
 -- Renames all free variables with a renaming function, `fn`
 shift : (Nat -> Nat) -> Term -> Term
 shift fn (var i)       = var (fn i)
@@ -77,6 +81,11 @@ uses (var i)       n | or0 _  = 1
 uses (var i)       n | or1 _ = 0
 uses (lam bod)     n = uses bod (succ n)
 uses (app fun arg) n = uses fun n + uses arg n
+
+uses-step : {i n : Nat} -> uses (var (succ i)) (succ n) == uses (var i) n
+uses-step {i} {n} with ==dec i n
+uses-step {i} {n} | or0 _ = refl
+uses-step {i} {n} | or1 _ = refl
 
 -- Computes the size of a term
 size : Term -> Nat
@@ -121,6 +130,14 @@ data _~>_ : Term → Term → Set where
 -- ::::::::::::::
 -- :: Theorems ::
 -- ::::::::::::::
+
+shift-lemma1 : (n m : Nat) → m <= n → shift-fn-many m succ n == succ n
+shift-lemma1 n 0 _ = refl
+shift-lemma1 (succ n) (succ m) (<=succ lte) = cong succ (shift-lemma1 n m lte)
+
+shift-lemma2 : (n m : Nat) → (succ n) <= m → shift-fn-many m succ n == n
+shift-lemma2 0 (succ m) (<=succ lte) = refl
+shift-lemma2 (succ n) (succ m) (<=succ lte) = cong succ (shift-lemma2 n m lte)
 
 -- Shifting a term doesn't affect its size
 shift-preserves-size : ∀ fn term → size (shift fn term) == size term
@@ -179,6 +196,42 @@ size-after-subst n (app bfun barg) arg =
       h = sym (mul-rightdist (uses bfun n) (uses barg n) (size arg))
       i = rwt (λ x → (size (subst (at n arg) bfun) + size (subst (at n arg) barg)) == ((size bfun + size barg) + x)) h g
   in  cong succ i
+
+uses-lemma : (idx n : Nat) -> (succ idx) <= n -> uses (var idx) n == 0
+uses-lemma idx (succ n) leq with ==dec idx (succ n)
+uses-lemma idx (succ n) leq | or1 _ = refl
+uses-lemma idx (succ n) (<=succ leq) | or0 eq = absurd (rwt (λ x → Not (x <= n)) (sym eq) (<-to-not->= (n-<-succ {n})) leq)
+
+uses-succ-lemma : (term : Term) → (n m : Nat) → m <= n → uses (shift (shift-fn-many m succ) term) (succ n) == uses term n
+uses-succ-lemma (var idx) n 0 _ = uses-step
+uses-succ-lemma (var idx) (succ n) (succ m) (<=succ m<=n) with <=-total (succ m) idx
+uses-succ-lemma (var idx) (succ n) (succ m) (<=succ m<=n) | or0 1+m<=idx  = trans (cong (λ x → uses (var x) (succ (succ n))) (shift-lemma1 idx (succ m) 1+m<=idx)) uses-step
+uses-succ-lemma (var idx) (succ n) (succ m) (<=succ m<=n) | or1 (<=succ idx<=m) =
+  let idx<=n = <=-trans idx<=m m<=n
+      p = <=succ idx<=n
+      p' = <=-incr-l 1 p
+  in
+  begin
+    uses (var (shift-fn-many (succ m) succ idx)) (succ (succ n))
+  ==[ cong (λ x → uses (var x) (succ (succ n))) (shift-lemma2 idx (succ m) (<=succ idx<=m)) ]
+    uses (var idx) (succ (succ n))
+  ==[ uses-lemma idx (succ (succ n)) p' ]
+    0
+  ==[ sym (uses-lemma idx (succ n) p) ]
+    uses (var idx) (succ n)
+  qed
+uses-succ-lemma (app fun arg) n m leq =
+ begin
+   uses (shift (shift-fn-many m succ) fun) (succ n) + uses (shift (shift-fn-many m succ) arg) (succ n)
+ ==[ cong (_+ uses (shift (shift-fn-many m succ) arg) (succ n)) (uses-succ-lemma fun n m leq)  ]
+   uses fun n + uses (shift (shift-fn-many m succ) arg) (succ n)
+ ==[ cong (uses fun n +_) (uses-succ-lemma arg n m leq)  ]
+   uses (app fun arg) n
+   qed
+uses-succ-lemma (lam bod) n m leq = uses-succ-lemma bod (succ n) (succ m) (<=succ leq)
+
+uses-succ : (term : Term) → (n : Nat) → uses (shift succ term) (succ n) == uses term n
+uses-succ term n = uses-succ-lemma term n 0 (<=zero n)
 
 postulate
   reduce-uses-lemma : (n : Nat) → (arg bod : Term) → IsAffine (lam bod) → (uses (subst (at 0 arg) bod) n) <= (uses bod (succ n) + uses arg n)

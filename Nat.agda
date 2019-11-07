@@ -275,9 +275,9 @@ data _<=_ : (a b : Nat) → Set where
 <=-antisym (<=zero 0) (<=zero 0) = refl
 <=-antisym (<=succ pfa) (<=succ pfb) = cong succ (<=-antisym pfa pfb)
 
-<=-total : (a b : Nat) -> Or (a <= b) (b <= a)
+<=-total : (a b : Nat) -> Or (a <= b) (succ b <= a)
 <=-total 0 b = or0 (<=zero b)
-<=-total a 0 = or1 (<=zero a)
+<=-total (succ a) 0 = or1 (<=succ (<=zero a))
 <=-total (succ a) (succ b) = case-or (<=-total a b) (λ x -> or0 (<=succ x)) (λ x -> or1 (<=succ x))
 
 succ-not-<=-0 : {a : Nat} -> Not ((succ a) <= 0) 
