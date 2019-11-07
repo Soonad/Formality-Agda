@@ -72,9 +72,9 @@ reduce (app (app ffun farg) arg)       = app (reduce (app ffun farg)) (reduce ar
 
 -- Computes how many times a free variable is used
 uses : Term -> Nat -> Nat
-uses (var i)       n with same i n
-uses (var i)       n | true  = 1
-uses (var i)       n | false = 0
+uses (var i)       n with ==dec i n
+uses (var i)       n | or0 _  = 1
+uses (var i)       n | or1 _ = 0
 uses (lam bod)     n = uses bod (succ n)
 uses (app fun arg) n = uses fun n + uses arg n
 
@@ -135,15 +135,15 @@ shift-preserves-size fn (app fun arg) =
   in  cong succ e
 
 -- Helper function 
-subst-miss-size : (n : Nat) → (bidx : Nat) → (arg : Term) → same bidx n == false → size (at n arg bidx) == 0
-subst-miss-size (succ n) (succ bidx) arg s = trans (shift-preserves-size succ (at n arg bidx)) (subst-miss-size n bidx arg s)
+subst-miss-size : (n : Nat) → (bidx : Nat) → (arg : Term) → Not(bidx == n) → size (at n arg bidx) == 0
+subst-miss-size (succ n) (succ bidx) arg s = trans (shift-preserves-size succ (at n arg bidx)) (subst-miss-size n bidx arg (modus-tollens (cong succ) s))
 subst-miss-size (succ n) zero        arg s = refl
 subst-miss-size zero     (succ bidx) arg s = refl
-subst-miss-size zero     zero        arg ()
+subst-miss-size zero     zero        arg s = absurd (s refl)
 
 -- Helper function 
-subst-hit-size : (n : Nat) → (bidx : Nat) → (arg : Term) → same bidx n == true → size (at n arg bidx) == size arg
-subst-hit-size (succ n) (succ bidx) arg s = trans (shift-preserves-size succ (at n arg bidx)) (subst-hit-size n bidx arg s)
+subst-hit-size : (n : Nat) → (bidx : Nat) → (arg : Term) → bidx == n → size (at n arg bidx) == size arg
+subst-hit-size (succ n) (succ bidx) arg s = trans (shift-preserves-size succ (at n arg bidx)) (subst-hit-size n bidx arg (succ-inj s))
 subst-hit-size (succ n) zero        arg ()
 subst-hit-size zero     (succ bidx) arg ()
 subst-hit-size zero     zero        arg s = refl
@@ -160,9 +160,9 @@ subst-fn-elim n arg = funext (subst-fn-elim-aux n arg)
 -- Converts the size of a substitution into a mathematical expression
 -- That is, size(t[x <- a]) == size(t) + uses(x, t) * size(a)
 size-after-subst : ∀ n bod arg → size (subst (at n arg) bod) == (size bod + (uses bod n * size arg))
-size-after-subst n (var bidx) arg with same bidx n | inspect (same bidx) n
-size-after-subst n (var bidx) arg | true  | its e = rwt (λ x → size (at n arg bidx) == x) (sym (add-n-0 (size arg))) (subst-hit-size n bidx arg e)
-size-after-subst n (var bidx) arg | false | its e = subst-miss-size n bidx arg e
+size-after-subst n (var bidx) arg with ==dec bidx n
+size-after-subst n (var bidx) arg | (or0 e) = rwt (λ x → size (at n arg bidx) == x) (sym (add-n-0 (size arg))) (subst-hit-size n bidx arg e)
+size-after-subst n (var bidx) arg | (or1 e) = subst-miss-size n bidx arg e
 size-after-subst n (lam bbod) arg =
   let a = size-after-subst (succ n) bbod arg
       b = subst-fn-elim n arg  
