@@ -40,7 +40,7 @@ succ-inj' : {a b : Nat} -> Not(a == b) -> Not((succ a) == (succ b))
 succ-inj' = modus-tollens succ-inj
 
 -- Nat equality is decidable
-succ-not-0 : {a : Nat} -> ((succ a) == 0) -> Empty
+succ-not-0 : {a : Nat} -> Not (succ a == 0)
 succ-not-0 ()
 
 ==dec : (a b : Nat) -> Or (a == b) (Not (a == b))
@@ -109,6 +109,18 @@ add-left-swap a b c =
     ((b + a) + c)
   ==[ sym (add-assoc b a c) ]
     (b + (a + c))
+  qed
+
+add-right-swap : ∀ a b c → ((a + b) + c) == ((a + c) + b)
+add-right-swap a b c =
+  begin
+    (a + b) + c
+  ==[ sym (add-assoc a b c) ]
+    a + (b + c)
+  ==[ cong (a +_) (add-comm b c) ]
+    a + (c + b)
+  ==[ add-assoc a c b ]
+    (a + c) + b
   qed
 
 add-inner-swap : ∀ a b c d → ((a + b) + (c + d)) == ((a + c) + (b + d))
@@ -243,6 +255,11 @@ add-no-inverse 0     0     eq = and refl refl
 add-no-inverse 0     (succ b) ()
 add-no-inverse (succ a) _        ()
 
+fact : (n m : Nat) -> (n + m) == 1 -> Or (And (n == 0) (m == 1)) (And (n == 1) (m == 0))
+fact 0 (succ m) pf = or0 (and refl pf)
+fact (succ n) 0 pf = or1 (and (trans (sym (add-n-0 (succ n))) pf) refl)
+fact (succ n) (succ m) pf = absurd (succ-not-0 (trans (add-comm (succ m) n) (succ-inj pf)))
+
 -- Less-than-or-equal
 data _<=_ : (a b : Nat) → Set where
   <=zero : ∀ a → 0 <= a
@@ -280,6 +297,17 @@ data _<=_ : (a b : Nat) → Set where
 <=-total (succ a) 0 = or1 (<=succ (<=zero a))
 <=-total (succ a) (succ b) = case-or (<=-total a b) (λ x -> or0 (<=succ x)) (λ x -> or1 (<=succ x))
 
+<=-trichotomy : (a b : Nat) -> Or (a == b) (Or (succ a <= b) (succ b <= a))
+<=-trichotomy 0 0 = or0 refl
+<=-trichotomy (succ a) 0 = or1 (or1 (<=succ (<=zero a)))
+<=-trichotomy 0 (succ b) = or1 (or0 (<=succ (<=zero b)))
+<=-trichotomy (succ a) (succ b) =
+  let case== x = or0 (cong succ x)
+      case<= x = or1 (or0 (<=succ x))
+      case>= x = or1 (or1 (<=succ x))
+      case!= x = case-or x case<= case>=
+  in case-or (<=-trichotomy a b) case== case!=
+
 succ-not-<=-0 : {a : Nat} -> Not ((succ a) <= 0) 
 succ-not-<=-0 ()
 
@@ -296,7 +324,7 @@ succ-strict (<=succ pf) = pf
 
 -- Less-than-or-equal-to Reasoning
 infix  1 begin<=_
-infixr 2 _<=[_]_
+infixr 2 _<=[_]_ _<=[]_
 infix  3 _qed<=
 
 begin<=_ : ∀ {x y : Nat}
@@ -304,6 +332,12 @@ begin<=_ : ∀ {x y : Nat}
     -----
   → x <= y
 begin<= x<=y  =  x<=y
+
+_<=[]_ : ∀ (x : Nat) {y : Nat}
+  → x <= y
+    -----
+  → x <= y
+x <=[] x<=y  =  x<=y
 
 _<=[_]_ : ∀ (x : Nat) {y z : Nat}
   → x <= y

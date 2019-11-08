@@ -19,10 +19,6 @@ module _ {A : Set} {B : A → Set} where
   inspect : (f : ∀ x → B x) (x : A) → Graph f x (f x)
   inspect _ _ = its refl
 
--- Several "obvious" postulates that must be proven
-postulate
-  funext   : {A : Set} → {B : A → Set} → {f g : (x : A) → B x} → (_ : (x : A) → f x == g x) → f == g
-
 -- ::::::::::::::
 -- :: Language ::
 -- ::::::::::::::
@@ -177,15 +173,6 @@ subst-hit-size (succ n) zero        arg ()
 subst-hit-size zero     (succ bidx) arg ()
 subst-hit-size zero     zero        arg s = refl
 
--- Helper function
-subst-fn-elim-aux : (n : Nat) → (arg : Term) → (m : Nat) → subst-fn (at n arg) m == at (succ n) arg m
-subst-fn-elim-aux n arg (succ m) = refl
-subst-fn-elim-aux n arg zero     = refl
-
--- Helper function
-subst-fn-elim : (n : Nat) → (arg : Term) → subst-fn (at n arg) == at (succ n) arg
-subst-fn-elim n arg = funext (subst-fn-elim-aux n arg)
-
 -- Converts the size of a substitution into a mathematical expression
 -- That is, size(t[x <- a]) == size(t) + uses(x, t) * size(a)
 size-after-subst : ∀ n bod arg → size (subst (at n arg) bod) == (size bod + (uses bod n * size arg))
@@ -194,9 +181,8 @@ size-after-subst n (var bidx) arg | (or0 e) = rwt (λ x → size (at n arg bidx)
 size-after-subst n (var bidx) arg | (or1 e) = subst-miss-size n bidx arg e
 size-after-subst n (lam bbod) arg =
   let a = size-after-subst (succ n) bbod arg
-      b = subst-fn-elim n arg  
-      c = rwt (λ x → size (subst x bbod) == (size bbod + (uses bbod (succ n) * size arg))) (sym b) a
-  in  cong succ c
+      b = rwt (λ x → size (subst x bbod) == (size bbod + (uses bbod (succ n) * size arg))) refl a
+  in  cong succ b
 size-after-subst n (app bfun barg) arg =
   let a = size-after-subst n bfun arg
       b = size-after-subst n barg arg
@@ -209,10 +195,10 @@ size-after-subst n (app bfun barg) arg =
       i = rwt (λ x → (size (subst (at n arg) bfun) + size (subst (at n arg) barg)) == ((size bfun + size barg) + x)) h g
   in  cong succ i
 
-uses-lemma : (idx n : Nat) -> (succ idx) <= n -> uses (var idx) n == 0
-uses-lemma idx (succ n) leq with ==dec idx (succ n)
-uses-lemma idx (succ n) leq | or1 _ = refl
-uses-lemma idx (succ n) (<=succ leq) | or0 eq = absurd (rwt (λ x → Not (x <= n)) (sym eq) (<-to-not->= (n-<-succ {n})) leq)
+uses-0-lemma : (idx n : Nat) -> (succ idx) <= n -> uses (var idx) n == 0
+uses-0-lemma idx (succ n) leq with ==dec idx (succ n)
+uses-0-lemma idx (succ n) leq | or1 _ = refl
+uses-0-lemma idx (succ n) (<=succ leq) | or0 eq = absurd (rwt (λ x → Not (x <= n)) (sym eq) (<-to-not->= (n-<-succ {n})) leq)
 
 uses-add-lemma : (term : Term) → (n m p : Nat) → m <= n → uses (shift (shift-fn-many m (p +_)) term) (p + n) == uses term n
 uses-add-lemma (var idx) n 0 0 _ = refl
@@ -245,9 +231,9 @@ uses-add-lemma (var idx) (succ n) (succ m) p (<=succ m<=n) | or1 (<=succ idx<=m)
     uses (var (shift-fn-many (succ m) (_+_ p) idx)) (p + succ n)
   ==[ cong (λ x → uses (var x) (p + succ n)) (shift-lemma2 idx (succ m) p (<=succ idx<=m)) ]
     uses (var idx) (p + succ n)
-  ==[ uses-lemma idx (p + succ n) q' ]
+  ==[ uses-0-lemma idx (p + succ n) q' ]
     0
-  ==[ sym (uses-lemma idx (succ n) q) ]
+  ==[ sym (uses-0-lemma idx (succ n) q) ]
     uses (var idx) (succ n)
   qed
 uses-add-lemma (app fun arg) n m p leq =
@@ -276,9 +262,75 @@ uses-add-lemma (lam bod) n m p leq =
 uses-add : (term : Term) → (n p : Nat) → uses (shift (p +_) term) (p + n) == uses term n
 uses-add term n p = uses-add-lemma term n 0 p (<=zero n)
 
-postulate
-  reduce-uses-lemma : (n : Nat) → (arg bod : Term) → IsAffine (lam bod) → (uses (subst (at 0 arg) bod) n) <= (uses bod (succ n) + uses arg n)
-  reduce-affine : (t : Term) → IsAffine t → IsAffine (reduce t)
+uses-succ : (term : Term) → (n : Nat) → uses (shift succ term) (succ n) == uses term n
+uses-succ term n = uses-add-lemma term n 0 1 (<=zero n)
+
+uses-subst-0 : (n m : Nat) → (arg bod : Term) → (uses bod m) == 0 → uses (subst (at m arg) bod) (m + n) == uses bod (succ (m + n))
+uses-subst-0 n 0 arg (var (succ idx)) pf = sym (uses-succ (var idx) n)
+uses-subst-0 n (succ m) arg (var 0) pf = refl
+uses-subst-0 n (succ m) arg (var (succ idx)) pf =
+    uses (shift succ (at m arg idx)) (succ m + n)
+  ==[ uses-succ (at m arg idx) (m + n) ]
+    uses (at m arg idx) (m + n)
+  ==[ uses-subst-0 n m arg (var idx) (trans (sym uses-step) pf) ]
+    uses (var idx) (succ m + n)
+  ==[ sym (uses-succ (var idx) (succ m + n)) ]
+    uses (var (succ idx)) (succ (succ m + n))
+  qed
+uses-subst-0 n m arg (lam bod) pf = uses-subst-0 n (succ m) arg bod pf
+uses-subst-0 n m arg (app fun arg') pf =
+  let eq = add-no-inverse (uses fun m) (uses arg' m) pf
+  in
+  begin
+  begin
+    uses (subst (at m arg) fun) (m + n) + uses (subst (at m arg) arg') (m + n)
+  ==[ cong (_+ uses (subst (at m arg) arg') (m + n)) (uses-subst-0 n m arg fun (fst eq)) ]
+    uses fun (succ m + n) + uses (subst (at m arg) arg') (m + n)
+  ==[ cong (uses fun (succ m + n) +_) (uses-subst-0 n m arg arg' (snd eq)) ]
+    uses fun (succ m + n) + uses arg' (succ m + n)
+  qed
+
+uses-subst-1 : (n m : Nat) → (arg bod : Term) → (uses bod m) == 1 → (uses (subst (at m arg) bod) (m + n)) == (uses bod (succ (m + n)) + uses arg n)
+uses-subst-1 n 0 arg (var 0) pf = refl
+uses-subst-1 n (succ m) arg (var (succ idx)) pf =
+  begin
+    uses (shift succ (at m arg idx)) (succ m + n)
+  ==[ uses-succ (at m arg idx) (m + n) ]
+    uses (at m arg idx) (m + n)
+  ==[ uses-subst-1 n m arg (var idx) (trans (sym uses-step) pf) ]
+    uses (var idx) (succ m + n) + uses arg n
+  ==[ cong (_+ uses arg n) (sym (uses-succ (var idx) (succ m + n))) ]
+    uses (var (succ idx)) (succ (succ m + n)) + uses arg n
+  qed
+uses-subst-1 n m arg (lam bod) pf = uses-subst-1 n (succ m) arg bod pf
+uses-subst-1 n m arg (app fun arg') pf =
+  let case0 x =
+        begin
+          uses (subst (at m arg) fun) (m + n) + uses (subst (at m arg) arg') (m + n)
+        ==[ cong (_+ uses (subst (at m arg) arg') (m + n)) (uses-subst-0 n m arg fun (fst x))]
+          uses fun (succ m + n) + uses (subst (at m arg) arg') (m + n)
+        ==[ cong (uses fun (succ m + n) +_) (uses-subst-1 n m arg arg' (snd x)) ]
+          uses fun (succ m + n) + (uses arg' (succ m + n) + uses arg n)
+        ==[ add-assoc (uses fun (succ m + n)) (uses arg' (succ m + n)) (uses arg n) ]
+          (uses fun (succ m + n) + uses arg' (succ m + n)) + uses arg n
+        qed
+      case1 x =
+        begin
+          uses (subst (at m arg) fun) (m + n) + uses (subst (at m arg) arg') (m + n)
+        ==[ cong (uses (subst (at m arg) fun) (m + n) +_) (uses-subst-0 n m arg arg' (snd x))]
+          uses (subst (at m arg) fun) (m + n) + uses arg' (succ m + n)
+        ==[ cong (_+ uses arg' (succ m + n)) (uses-subst-1 n m arg fun (fst x)) ]
+          (uses fun (succ m + n) + uses arg n) + uses arg' (succ m + n)
+        ==[ add-right-swap (uses fun (succ m + n)) (uses arg n) (uses arg' (succ m + n)) ]
+          (uses fun (succ m + n) + uses arg' (succ m + n)) + uses arg n
+        qed
+  in case-or (fact (uses fun m) (uses arg' m) pf) case0 case1
+
+reduce-uses-lemma : (n : Nat) → (arg bod : Term) → uses bod 0 <= 1 → (uses (subst (at 0 arg) bod) n) <= (uses bod (succ n) + uses arg n)
+reduce-uses-lemma n arg bod pf with uses bod 0             | inspect (uses bod) 0
+reduce-uses-lemma n arg bod _            | 0               | its e = <=-incr-r (uses arg n) (<=-refl (uses-subst-0 n 0 arg bod e))
+reduce-uses-lemma n arg bod _            | 1               | its e = <=-refl (uses-subst-1 n 0 arg bod e)
+reduce-uses-lemma n arg bod (<=succ leq) | (succ (succ m)) | its e = absurd (succ-not-<=-0 leq)
 
 reduce-uses : (n : Nat) → (t : Term) → IsAffine t → uses (reduce t) n <= uses t n
 reduce-uses n (var idx) _ = <=-refl'
@@ -290,13 +342,13 @@ reduce-uses n (app (app ffun farg) arg) (app-affine (app-affine ffun-af farg-af)
   in
   begin<=
     uses (reduce (app (app ffun farg) arg)) n
-  <=[ <=-refl' ]
+  <=[]
     uses (app (reduce (app ffun farg)) (reduce arg)) n
-  <=[ <=-refl' ]
+  <=[]
     uses (reduce (app ffun farg)) n + uses (reduce arg) n
   <=[ <=-additive pf1 pf2 ]
     uses (app ffun farg) n + uses arg n
-  <=[ <=-refl' ]
+  <=[]
     uses (app (app ffun farg) arg) n
   qed<=
 reduce-uses n (app (lam bod) arg) (app-affine (lam-affine eq bod-af) arg-af) =
@@ -305,13 +357,13 @@ reduce-uses n (app (lam bod) arg) (app-affine (lam-affine eq bod-af) arg-af) =
   in
   begin<=
     uses (reduce (app (lam bod) arg)) n
-  <=[ <=-refl' ]
+  <=[]
     uses (subst (at zero (reduce arg)) (reduce bod)) n
-  <=[ reduce-uses-lemma n (reduce arg) (reduce bod) (reduce-affine (lam bod) (lam-affine eq bod-af)) ]
+  <=[ reduce-uses-lemma n (reduce arg) (reduce bod) (<=-trans (reduce-uses 0 bod bod-af) eq) ]
      uses (reduce bod) (succ n) + uses (reduce arg) n
   <=[ <=-additive pf1 pf2 ]
     uses bod (succ n) + uses arg n
-  <=[ <=-refl' ]
+  <=[]
     uses (app (lam bod) arg) n
   qed<=
 
@@ -332,7 +384,7 @@ reduce<= (app (lam fbod) arg) (app-affine (lam-affine leq af-bod) af-arg) =
   in
   begin<= 
     size (reduce (app (lam fbod) arg))
-  <=[ <=-refl' ]
+  <=[]
     size (subst (at 0 (reduce arg)) (reduce fbod))
   <=[ step1 ]
     size (reduce fbod) + (uses (reduce fbod) 0 * size (reduce arg))
@@ -348,7 +400,7 @@ reduce<= (app (lam fbod) arg) (app-affine (lam-affine leq af-bod) af-arg) =
     size fbod + size arg
   <=[ step7 ]
     succ (succ (size fbod + size arg))
-  <=[ <=-refl' ]
+  <=[]
     size (app (lam fbod) arg)
   qed<=
 
@@ -393,7 +445,7 @@ reduce< (app (lam fbod) arg) (app-affine (lam-affine leq af-bod) af-arg) foundre
     succ (size fbod + size arg)
   <=[ step7  ]
     succ (succ (size fbod + size arg))
-  <=[ <=-refl' ]
+  <=[]
     size (app (lam fbod) arg)
   qed<
 
