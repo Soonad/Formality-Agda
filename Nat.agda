@@ -255,10 +255,19 @@ add-no-inverse 0     0     eq = and refl refl
 add-no-inverse 0     (succ b) ()
 add-no-inverse (succ a) _        ()
 
-fact : (n m : Nat) -> (n + m) == 1 -> Or (And (n == 0) (m == 1)) (And (n == 1) (m == 0))
-fact 0 (succ m) pf = or0 (and refl pf)
-fact (succ n) 0 pf = or1 (and (trans (sym (add-n-0 (succ n))) pf) refl)
-fact (succ n) (succ m) pf = absurd (succ-not-0 (trans (add-comm (succ m) n) (succ-inj pf)))
+add-is-succ : (a b c : Nat) -> (a + b) == succ c -> Sum Nat (λ x → Or (And (a == succ x) ((x + b) == c)) (And (b == succ x) ((a + x) == c)))
+add-is-succ 0 (succ b) c pf = sigma b (or1 (and refl (succ-inj pf)))
+add-is-succ (succ a) 0 c pf = sigma a (or0 (and refl (succ-inj pf)))
+add-is-succ (succ a) (succ b) 0 pf = absurd (succ-not-0 (trans (add-comm (succ b) a) (succ-inj pf)))
+add-is-succ (succ a) (succ b) (succ c) pf = sigma a (or0 (and refl (succ-inj pf)))
+
+fact : (a b : Nat) -> (a + b) == 1 -> Or (And (a == 0) (b == 1)) (And (b == 0) (a == 1))
+fact a b pf with add-is-succ a b 0 pf
+fact a b pf | sigma 0 (or0 (and eq1 eq2)) = or1 (and eq2 eq1)
+fact a b pf | sigma x (or1 (and eq1 eq2)) =
+  let and a==0 x==0 = add-no-inverse a x eq2
+      b==1 = rwt (λ x → b == (succ x)) x==0 eq1
+  in or0 (and a==0 b==1)
 
 -- Less-than-or-equal
 data _<=_ : (a b : Nat) → Set where

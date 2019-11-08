@@ -25,16 +25,11 @@ data Bool : Set where
 {-# BUILTIN FALSE false #-}
 
 -- Simple pairs (a.k.a., logical And)
-data And (A : Set) (B : Set) : Set where
-  and : (a : A) → (b : B) → And A B
-
--- First projection
-fst : ∀ {A B} → And A B → A
-fst (and a b) = a
-
--- Second projection
-snd : ∀ {A B} → And A B → B
-snd (and a b) = b
+record And (A : Set) (B : Set) : Set where
+  constructor and
+  field
+    fst : A
+    snd : B
 
 -- Simple disjunctions (a.k.a. logical Or)
 data Or (A : Set) (B : Set) : Set where

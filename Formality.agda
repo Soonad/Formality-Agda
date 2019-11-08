@@ -101,16 +101,31 @@ data IsAffine : (t : Term) → Set where
 
 -- This term is on normal form
 data IsNormal : (t : Term) → Set where
-  var-normal : ∀ a → IsNormal (var a)
-  lam-normal : ∀ bod → IsNormal bod -> IsNormal (lam bod)
+  var-normal : ∀ {a} → IsNormal (var a)
+  lam-normal : ∀ {bod} → IsNormal bod -> IsNormal (lam bod)
   app-var-normal : ∀ {fidx arg} → IsNormal arg -> IsNormal (app (var fidx) arg)
   app-app-normal : ∀ {ffun farg arg} → IsNormal (app ffun farg) → IsNormal arg -> IsNormal (app (app ffun farg) arg)
 
 -- This term has redexes
 data HasRedex : (t : Term) → Set where
-  lam-redex : ∀ bod → HasRedex bod -> HasRedex (lam bod)
+  lam-redex : ∀ {bod} → HasRedex bod -> HasRedex (lam bod)
   app-redex : ∀ {fun arg} → Or (HasRedex fun) (HasRedex arg) -> HasRedex (app fun arg)
   found-redex : ∀ {fbod arg} → HasRedex (app (lam fbod) arg)
+
+-- A normal term has no redexes
+normal-has-noredex : (t : Term) → IsNormal t → Not (HasRedex t)
+normal-has-noredex (lam bod) (lam-normal bod-isnormal) (lam-redex bod-hasredex) = normal-has-noredex bod bod-isnormal bod-hasredex
+normal-has-noredex (app (var idx) arg) (app-var-normal arg-isnormal) (app-redex (or1 arg-hasredex)) = normal-has-noredex arg arg-isnormal arg-hasredex
+normal-has-noredex (app (app ffun farg) arg) (app-app-normal fun-isnormal _) (app-redex (or0 fun-hasredex)) = normal-has-noredex (app ffun farg) fun-isnormal fun-hasredex 
+normal-has-noredex (app (app ffun farg) arg) (app-app-normal _ arg-isnormal) (app-redex (or1 arg-hasredex)) = normal-has-noredex arg arg-isnormal arg-hasredex
+
+-- A term that has no redexes is normal
+noredex-is-normal : (t : Term) → Not (HasRedex t) → IsNormal t
+noredex-is-normal (var idx) noredex = var-normal
+noredex-is-normal (lam bod) noredex = lam-normal (noredex-is-normal bod (λ x → noredex (lam-redex x)))
+noredex-is-normal (app (var idx) arg) noredex = app-var-normal (noredex-is-normal arg (λ x → noredex (app-redex (or1 x))))
+noredex-is-normal (app (app ffun farg) arg) noredex = app-app-normal (noredex-is-normal (app ffun farg) (λ x → noredex (app-redex (or0 x)))) (noredex-is-normal arg (λ x → noredex (app-redex (or1 x))))
+noredex-is-normal (app (lam bod) arg) noredex = absurd (noredex found-redex)
 
 -- Computes the number of redexes in a term
 redexes : (t : Term) → Nat
@@ -279,14 +294,14 @@ uses-subst-0 n (succ m) arg (var (succ idx)) pf =
   qed
 uses-subst-0 n m arg (lam bod) pf = uses-subst-0 n (succ m) arg bod pf
 uses-subst-0 n m arg (app fun arg') pf =
-  let eq = add-no-inverse (uses fun m) (uses arg' m) pf
+  let and eq1 eq2 = add-no-inverse (uses fun m) (uses arg' m) pf
   in
   begin
   begin
     uses (subst (at m arg) fun) (m + n) + uses (subst (at m arg) arg') (m + n)
-  ==[ cong (_+ uses (subst (at m arg) arg') (m + n)) (uses-subst-0 n m arg fun (fst eq)) ]
+  ==[ cong (_+ uses (subst (at m arg) arg') (m + n)) (uses-subst-0 n m arg fun eq1) ]
     uses fun (succ m + n) + uses (subst (at m arg) arg') (m + n)
-  ==[ cong (uses fun (succ m + n) +_) (uses-subst-0 n m arg arg' (snd eq)) ]
+  ==[ cong (uses fun (succ m + n) +_) (uses-subst-0 n m arg arg' eq2) ]
     uses fun (succ m + n) + uses arg' (succ m + n)
   qed
 
@@ -305,21 +320,23 @@ uses-subst-1 n (succ m) arg (var (succ idx)) pf =
 uses-subst-1 n m arg (lam bod) pf = uses-subst-1 n (succ m) arg bod pf
 uses-subst-1 n m arg (app fun arg') pf =
   let case0 x =
+        let and eq1 eq2 = x in
         begin
           uses (subst (at m arg) fun) (m + n) + uses (subst (at m arg) arg') (m + n)
-        ==[ cong (_+ uses (subst (at m arg) arg') (m + n)) (uses-subst-0 n m arg fun (fst x))]
+        ==[ cong (_+ uses (subst (at m arg) arg') (m + n)) (uses-subst-0 n m arg fun eq1)]
           uses fun (succ m + n) + uses (subst (at m arg) arg') (m + n)
-        ==[ cong (uses fun (succ m + n) +_) (uses-subst-1 n m arg arg' (snd x)) ]
+        ==[ cong (uses fun (succ m + n) +_) (uses-subst-1 n m arg arg' eq2) ]
           uses fun (succ m + n) + (uses arg' (succ m + n) + uses arg n)
         ==[ add-assoc (uses fun (succ m + n)) (uses arg' (succ m + n)) (uses arg n) ]
           (uses fun (succ m + n) + uses arg' (succ m + n)) + uses arg n
         qed
       case1 x =
+        let and eq1 eq2 = x in
         begin
           uses (subst (at m arg) fun) (m + n) + uses (subst (at m arg) arg') (m + n)
-        ==[ cong (uses (subst (at m arg) fun) (m + n) +_) (uses-subst-0 n m arg arg' (snd x))]
+        ==[ cong (uses (subst (at m arg) fun) (m + n) +_) (uses-subst-0 n m arg arg' eq1)]
           uses (subst (at m arg) fun) (m + n) + uses arg' (succ m + n)
-        ==[ cong (_+ uses arg' (succ m + n)) (uses-subst-1 n m arg fun (fst x)) ]
+        ==[ cong (_+ uses arg' (succ m + n)) (uses-subst-1 n m arg fun eq2) ]
           (uses fun (succ m + n) + uses arg n) + uses arg' (succ m + n)
         ==[ add-right-swap (uses fun (succ m + n)) (uses arg n) (uses arg' (succ m + n)) ]
           (uses fun (succ m + n) + uses arg' (succ m + n)) + uses arg n
@@ -407,7 +424,7 @@ reduce<= (app (lam fbod) arg) (app-affine (lam-affine leq af-bod) af-arg) =
 -- Reducing an affine term with redexes reduces its size
 reduce< : (t : Term) → IsAffine t → HasRedex t → size (reduce t) < size t
 reduce< (var idx) _ ()
-reduce< (lam bod) (lam-affine _ af) (lam-redex _ hr) = <succ (reduce< bod af hr)
+reduce< (lam bod) (lam-affine _ af) (lam-redex hr) = <succ (reduce< bod af hr)
 reduce< (app (var fidx) arg) (app-affine _ af) (app-redex (or1 o1)) = <succ (reduce< arg af o1)
 reduce< (app (app ffun farg) arg) (app-affine leq af) (app-redex (or0 o0)) =
   <succ (<-additive (reduce< (app ffun farg) leq o0) (reduce<= arg af))
