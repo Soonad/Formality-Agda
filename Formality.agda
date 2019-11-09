@@ -36,8 +36,7 @@ shift-fn fn zero     = zero
 shift-fn fn (succ i) = succ (fn i)
 
 shift-fn-many : Nat -> (Nat -> Nat) -> Nat -> Nat
-shift-fn-many 0 fn = fn
-shift-fn-many (succ n) fn = shift-fn (shift-fn-many n fn)
+shift-fn-many n fn = pow shift-fn n fn
 
 -- Renames all free variables with a renaming function, `fn`
 shift : (Nat -> Nat) -> Term -> Term
@@ -142,25 +141,81 @@ data _~>_ : Term → Term → Set where
   ~app1 : ∀ {f a0 a1} → a0 ~> a1 → app f a0 ~> app f a1
   ~lam0 : ∀ {b0 b1} → b0 ~> b1 → lam b0 ~> lam b1
 
--- ::::::::::::::
--- :: Theorems ::
--- ::::::::::::::
+-- :::::::::::::::::::::::::
+-- :: Theorems and lemmas ::
+-- :::::::::::::::::::::::::
 
-shift-lemma1 : (n m p : Nat) → m <= n → shift-fn-many m (p +_) n == (p + n)
-shift-lemma1 n 0 p _ = refl
-shift-lemma1 (succ n) (succ m) 0 (<=succ lte) = cong succ (shift-lemma1 n m 0 lte)
-shift-lemma1 (succ n) (succ m) (succ p) (<=succ lte) =
+shift-0-aux1 : ∀ idx m → shift-fn-many m (0 +_) idx == idx
+shift-0-aux1 idx 0 = refl
+shift-0-aux1 0 (succ m) = refl
+shift-0-aux1 (succ idx) (succ m) = cong succ (shift-0-aux1 idx m)
+
+shift-0-aux2 : ∀ term m → shift (shift-fn-many m (0 +_)) term == term
+shift-0-aux2 (var idx) m = cong var (shift-0-aux1 idx m)
+shift-0-aux2 (lam bod) m = cong lam (shift-0-aux2 bod (succ m))
+shift-0-aux2 (app fun arg) m = trans (cong (λ x → app x (shift (shift-fn-many m (0 +_)) arg)) (shift-0-aux2 fun m)) (cong (λ x → app fun x) (shift-0-aux2 arg m))
+
+shift-0 : ∀ term → shift (0 +_) term == term
+shift-0 term = shift-0-aux2 term 0
+
+shift-succ-aux1 : ∀ a idx m → shift-fn-many m succ (shift-fn-many m (a +_) idx) == shift-fn-many m (succ a +_) idx
+shift-succ-aux1 0 idx m = cong (shift-fn-many m succ) (shift-0-aux1 idx m)
+shift-succ-aux1 (succ a) idx 0 = refl
+shift-succ-aux1 (succ a) 0 (succ m) = refl
+shift-succ-aux1 (succ a) (succ idx) (succ m) = cong succ (shift-succ-aux1 (succ a) idx m)
+
+shift-succ-aux2 : ∀ a term m → shift (shift-fn-many m succ) (shift (shift-fn-many m (a +_)) term) == shift (shift-fn-many m (succ a +_)) term
+shift-succ-aux2 0 term m = cong (λ x → shift (shift-fn-many m succ) x) (shift-0-aux2 term m)
+shift-succ-aux2 (succ a) (var idx) m = cong var (shift-succ-aux1 (succ a) idx m)
+shift-succ-aux2 (succ a) (lam bod) m = cong lam (shift-succ-aux2 (succ a) bod (succ m))
+shift-succ-aux2 (succ a) (app fun arg) m =
+  let term1 = shift (shift-fn-many m succ) (shift (shift-fn-many m (succ a +_)) arg)
+      term2 = shift (shift-fn-many m (succ (succ a) +_)) fun
+  in trans (cong (λ x → app x term1) (shift-succ-aux2 (succ a) fun m)) (cong (λ x → app term2 x) (shift-succ-aux2 (succ a) arg m))
+
+shift-succ : ∀ a term → shift succ (shift (a +_) term) == shift (succ a +_) term
+shift-succ a term = shift-succ-aux2 a term 0
+
+shift-add : ∀ a b term → shift (a +_) (shift (b +_) term) == shift ((a + b) +_) term
+shift-add 0 b term = shift-0 (shift (b +_) term)
+shift-add (succ a) b term =
+  begin
+    shift (succ a +_) (shift (b +_) term)
+  ==[ sym (shift-succ a (shift (b +_) term)) ]
+    shift succ (shift (a +_) (shift (b +_) term))
+  ==[ cong (shift succ) (shift-add a b term) ]
+    shift succ (shift ((a + b) +_) term)
+  ==[ shift-succ (a + b) term ]
+    shift ((succ a + b) +_) term
+  qed
+
+at-lemma1 : ∀ m idx arg → m == idx → at m arg idx == shift (m +_) arg
+at-lemma1 0 0 arg eq = sym (shift-0 arg)
+at-lemma1 (succ m) (succ idx) arg eq = trans (cong (λ x → shift succ x) (at-lemma1 m idx arg (succ-inj eq))) (shift-succ m arg)
+
+at-lemma2 : ∀ m idx arg → m < (succ idx) → at m arg (succ idx) == var idx
+at-lemma2 0 idx arg _ = refl
+at-lemma2 (succ m) (succ idx) arg (<succ idx<m) = cong (λ x → shift succ x) (at-lemma2 m idx arg idx<m)
+
+at-lemma3 : ∀ m idx arg → idx < m → at m arg idx == var idx
+at-lemma3 (succ m) 0 arg _ = refl
+at-lemma3 (succ m) (succ idx) arg (<succ idx<m) = cong (λ x → shift succ x) (at-lemma3 m idx arg idx<m)
+
+shift-fn-lemma1 : (n m p : Nat) → m <= n → shift-fn-many m (p +_) n == (p + n)
+shift-fn-lemma1 n 0 p _ = refl
+shift-fn-lemma1 (succ n) (succ m) 0 (<=succ lte) = cong succ (shift-fn-lemma1 n m 0 lte)
+shift-fn-lemma1 (succ n) (succ m) (succ p) (<=succ lte) =
   begin
     succ (shift-fn-many m (succ p +_) n)
-  ==[ cong succ (shift-lemma1 n m (succ p) lte) ]
+  ==[ cong succ (shift-fn-lemma1 n m (succ p) lte) ]
     succ (succ (p + n))
   ==[ sym (add-n-succ (succ p) n) ]
     (succ p + succ n)
   qed
 
-shift-lemma2 : (n m p : Nat) → (succ n) <= m → shift-fn-many m (p +_) n == n
-shift-lemma2 0 (succ m) p (<=succ lte) = refl
-shift-lemma2 (succ n) (succ m) p (<=succ lte) = cong succ (shift-lemma2 n m p lte)
+shift-fn-lemma2 : (fn : Nat → Nat) → (n m : Nat) → (succ n) <= m → shift-fn-many m fn n == n
+shift-fn-lemma2 fn 0 (succ m) (<=succ lte) = refl
+shift-fn-lemma2 fn (succ n) (succ m) (<=succ lte) = cong succ (shift-fn-lemma2 fn n m lte)
 
 -- Shifting a term doesn't affect its size
 shift-preserves-size : ∀ fn term → size (shift fn term) == size term
@@ -215,6 +270,12 @@ uses-0-lemma idx (succ n) leq with ==dec idx (succ n)
 uses-0-lemma idx (succ n) leq | or1 _ = refl
 uses-0-lemma idx (succ n) (<=succ leq) | or0 eq = absurd (rwt (λ x → Not (x <= n)) (sym eq) (<-to-not->= (n-<-succ {n})) leq)
 
+var-uses<=1 : {idx n : Nat} -> uses (var idx) n <= 1
+var-uses<=1 {0} {0} = <=-refl'
+var-uses<=1 {0} {succ n} = <=zero 1
+var-uses<=1 {succ idx} {0} = <=zero 1
+var-uses<=1 {succ idx} {succ n} = <=-trans (<=-refl uses-step) var-uses<=1
+
 uses-add-lemma : (term : Term) → (n m p : Nat) → m <= n → uses (shift (shift-fn-many m (p +_)) term) (p + n) == uses term n
 uses-add-lemma (var idx) n 0 0 _ = refl
 uses-add-lemma (var idx) n 0 (succ p) _ =
@@ -227,12 +288,12 @@ uses-add-lemma (var idx) n 0 (succ p) _ =
     uses (var idx) n
   qed
 uses-add-lemma (var idx) (succ n) (succ m) p (<=succ m<=n) with <=-total (succ m) idx
-uses-add-lemma (var idx) (succ n) (succ m) p (<=succ m<=n) | or0 1+m<=idx  = -- trans (cong (λ x → uses (var x) (succ (succ n))) (shift-lemma1 idx (succ m) 1+m<=idx)) uses-step
+uses-add-lemma (var idx) (succ n) (succ m) p (<=succ m<=n) | or0 1+m<=idx  =
   begin
     uses (shift (shift-fn-many (succ m) (p +_)) (var idx)) (p + succ n)
   ==[]
     uses (var (shift-fn-many (succ m) (p +_) idx)) (p + succ n)
-  ==[ cong (λ x → uses (var x) (p + succ n)) (shift-lemma1 idx (succ m) p 1+m<=idx) ]
+  ==[ cong (λ x → uses (var x) (p + succ n)) (shift-fn-lemma1 idx (succ m) p 1+m<=idx) ]
     uses (var (p + idx)) (p + succ n)
   ==[ uses-n-step p ]
     uses (var idx) (succ n)
@@ -244,7 +305,7 @@ uses-add-lemma (var idx) (succ n) (succ m) p (<=succ m<=n) | or1 (<=succ idx<=m)
   in
     begin
     uses (var (shift-fn-many (succ m) (_+_ p) idx)) (p + succ n)
-  ==[ cong (λ x → uses (var x) (p + succ n)) (shift-lemma2 idx (succ m) p (<=succ idx<=m)) ]
+  ==[ cong (λ x → uses (var x) (p + succ n)) (shift-fn-lemma2 (p +_) idx (succ m) (<=succ idx<=m)) ]
     uses (var idx) (p + succ n)
   ==[ uses-0-lemma idx (p + succ n) q' ]
     0
@@ -384,6 +445,19 @@ reduce-uses n (app (lam bod) arg) (app-affine (lam-affine eq bod-af) arg-af) =
     uses (app (lam bod) arg) n
   qed<=
 
+postulate
+  reduce-affine-lemma : (arg bod : Term) → IsAffine arg → IsAffine bod → (m : Nat) → (uses bod m) <= 1 → IsAffine (subst (at m arg) bod)
+
+reduce-affine : (t : Term) → IsAffine t → IsAffine (reduce t)
+reduce-affine (var idx) af = var-affine
+reduce-affine (lam bod) (lam-affine leq bod-af) = lam-affine (<=-trans (reduce-uses 0 bod bod-af) leq) (reduce-affine bod bod-af)
+reduce-affine (app (var idx) arg) (app-affine _ arg-af) = app-affine var-affine (reduce-affine arg arg-af)
+reduce-affine (app (app ffun farg) arg) (app-affine fun-af arg-af) = app-affine (reduce-affine (app ffun farg) fun-af) (reduce-affine arg arg-af)
+reduce-affine (app (lam bod) arg) (app-affine (lam-affine leq bod-af) arg-af) =
+  let red-arg-af = (reduce-affine arg arg-af)
+      red-bod-af = (reduce-affine bod bod-af)
+  in reduce-affine-lemma (reduce arg) (reduce bod) red-arg-af red-bod-af 0 (<=-trans (reduce-uses 0 bod bod-af) leq)
+
 -- Reducing an affine term either reduces its size or keeps it the same
 reduce<= : (t : Term) → IsAffine t → size (reduce t) <= size t
 reduce<= (var idx) _ = <=zero zero
@@ -444,7 +518,7 @@ reduce< (app (lam fbod) arg) (app-affine (lam-affine leq af-bod) af-arg) foundre
   in
   begin< 
     size (reduce (app (lam fbod) arg))
-  <='[ <=-refl' ]
+  <='[]
     size (subst (at 0 (reduce arg)) (reduce fbod))
   <='[ step1 ]
     size (reduce fbod) + (uses (reduce fbod) 0 * size (reduce arg))
@@ -465,6 +539,9 @@ reduce< (app (lam fbod) arg) (app-affine (lam-affine leq af-bod) af-arg) foundre
   <=[]
     size (app (lam fbod) arg)
   qed<
+
+normalize-aux : (t : Term) → IsAffine t → Nat → Term
+normalize-aux t af n = t
 
 -- :::::::::::
 -- :: Tests ::

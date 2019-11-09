@@ -28,6 +28,23 @@ _*_ (succ n) m = m + (n * m)
 _*_ 0     m = 0
 {-# BUILTIN NATTIMES _*_ #-}
 
+-- Pow'ers of endofunctions
+pow : {A : Set} -> (A -> A) -> Nat -> A -> A
+pow f 0 x = x
+pow f (succ n) x = f (pow f n x)
+
+pow' : {A : Set} -> (A -> A) -> Nat -> A -> A
+pow' f 0 x = x
+pow' f (succ n) x = pow' f n (f x)
+
+pow'-lemma : {A : Set} -> (f : A -> A) -> (n : Nat) -> (x : A) -> f (pow' f n x) == pow' f n (f x)
+pow'-lemma f 0 x = refl
+pow'-lemma f (succ n) x = pow'-lemma f n (f x)
+
+pow==pow' : {A : Set} -> (f : A -> A) -> (n : Nat) -> (x : A) -> pow f n x == pow' f n x
+pow==pow' f 0 x = refl
+pow==pow' f (succ n) x = trans (cong f (pow==pow' f n x)) (pow'-lemma f n x)
+
 -- Successor is injective
 pred : Nat -> Nat
 pred 0 = 0
@@ -397,6 +414,17 @@ not-n-<-0 ()
 <-stronger-<= {0} {(succ b)} (<zero b) = <=zero (succ b)
 <-stronger-<= {succ a} {succ b} (<succ pf) = <=succ (<-stronger-<= pf)
 
+nat-trichotomy : (a b : Nat) -> Or (a == b) (Or (a < b) (b < a))
+nat-trichotomy 0 0 = or0 refl
+nat-trichotomy (succ a) 0 = or1 (or1 (<zero a))
+nat-trichotomy 0 (succ b) = or1 (or0 (<zero b))
+nat-trichotomy (succ a) (succ b) =
+  let case== x = or0 (cong succ x)
+      case< x = or1 (or0 (<succ x))
+      case> x = or1 (or1 (<succ x))
+      case!= x = case-or x case< case>
+  in case-or (nat-trichotomy a b) case== case!=
+
 -- An alternative definition of `a < b` is, similarly, is `exists x : Nat, succ (a + x) = b` therefore we can write the following functions:
 <-add : {a b : Nat} (x : Nat) -> succ (a + x) == b -> a < b
 <-add x eq = <=-to-< (<=-add x eq)
@@ -447,7 +475,7 @@ not->=-to-< {succ a} {succ b} neg = <succ (not->=-to-< (λ (pf : b <= a) -> neg 
 
 -- Less-than Reasoning: requires proving only one < statement in the whole reasoning chain. The rest can be proven by weaker <= statements
 infix  1 begin<_
-infixr 2 _<[_]_ _<='[_]_
+infixr 2 _<[_]_ _<='[_]_ _<='[]_
 infix  3 _qed<
 
 begin<_ : ∀ {x y : Nat}
@@ -462,6 +490,12 @@ _<[_]_ : ∀ (x : Nat) {y z : Nat}
     -----
   → x < z
 x <[ x<y ] y<=z =  <-comb-<= x<y y<=z
+
+_<='[]_ : ∀ (x : Nat) {y : Nat}
+  → x < y
+    -----
+  → x < y
+x <='[] x<y = x<y
 
 _<='[_]_ : ∀ (x : Nat) {y z : Nat}
   → x <= y
