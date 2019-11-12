@@ -8,17 +8,6 @@ open import Nat
 open import Equality
 open import EquationalReasoning
 
--- This enables the "case-of idiom", which isn't built-in
-case_of_ : ∀ {a b} {A : Set a} {B : Set b} → A → (A → B) → B
-case x of f = f x
-
--- This enables the "inspect idiom", which isn't built-in
-module _ {A : Set} {B : A → Set} where
-  data Graph (f : ∀ x → B x) (x : A) (y : B x) : Set where
-    its : f x == y → Graph f x y
-  inspect : (f : ∀ x → B x) (x : A) → Graph f x (f x)
-  inspect _ _ = its refl
-
 -- ::::::::::::::
 -- :: Language ::
 -- ::::::::::::::
@@ -71,20 +60,15 @@ reduce (app (app ffun farg) arg)       = app (reduce (app ffun farg)) (reduce ar
 
 -- Computes how many times a free variable is used
 uses : Term -> Nat -> Nat
-uses (var i)       n with ==dec i n
-uses (var i)       n | or0 _  = 1
-uses (var i)       n | or1 _ = 0
+uses (var i)       n with same i n
+uses (var i)       n | true  = 1
+uses (var i)       n | false = 0
 uses (lam bod)     n = uses bod (succ n)
 uses (app fun arg) n = uses fun n + uses arg n
 
-uses-step : {i n : Nat} -> uses (var (succ i)) (succ n) == uses (var i) n
-uses-step {i} {n} with ==dec i n
-uses-step {i} {n} | or0 _ = refl
-uses-step {i} {n} | or1 _ = refl
-
 uses-n-step : {i n : Nat} -> (p : Nat) -> uses (var (p + i)) (p + n) == uses (var i) n
 uses-n-step 0 = refl
-uses-n-step (succ p) = trans uses-step (uses-n-step p)
+uses-n-step (succ p) = uses-n-step p
 
 -- Computes the size of a term
 size : Term -> Nat
@@ -251,9 +235,9 @@ subst-hit-size zero     zero        arg s = refl
 -- Converts the size of a substitution into a mathematical expression
 -- That is, size(t[x <- a]) == size(t) + uses(x, t) * size(a)
 size-after-subst : ∀ n bod arg → size (subst (at n arg) bod) == (size bod + (uses bod n * size arg))
-size-after-subst n (var bidx) arg with ==dec bidx n
-size-after-subst n (var bidx) arg | (or0 e) = rwt (λ x → size (at n arg bidx) == x) (sym (add-n-0 (size arg))) (subst-hit-size n bidx arg e)
-size-after-subst n (var bidx) arg | (or1 e) = subst-miss-size n bidx arg e
+size-after-subst n (var bidx) arg with same bidx n | inspect (same bidx) n
+size-after-subst n (var bidx) arg | true           | its eq = rwt (λ x → size (at n arg bidx) == x) (sym (add-n-0 (size arg))) (subst-hit-size n bidx arg (same-true bidx n eq))
+size-after-subst n (var bidx) arg | false          | its eq = subst-miss-size n bidx arg (same-false bidx n eq)
 size-after-subst n (lam bbod) arg =
   let a = size-after-subst (succ n) bbod arg
       b = rwt (λ x → size (subst x bbod) == (size bbod + (uses bbod (succ n) * size arg))) refl a
@@ -271,19 +255,19 @@ size-after-subst n (app bfun barg) arg =
   in  cong succ i
 
 uses-0-lemma : (idx n : Nat) -> Not (idx == n) -> uses (var idx) n == 0
-uses-0-lemma idx n neq with ==dec idx n
-uses-0-lemma idx n neq | or0 refl = absurd (neq refl)
-uses-0-lemma idx n neq | or1 _ = refl
+uses-0-lemma idx n neq with same idx n | inspect (same idx) n
+uses-0-lemma idx n neq | true          | its eq =  absurd (neq (same-true idx n eq))
+uses-0-lemma idx n neq | false         | its eq = refl
 
 uses-1-lemma : (idx n : Nat) -> idx == n -> uses (var idx) n == 1
-uses-1-lemma idx n eq with ==dec idx n
-uses-1-lemma idx n eq | or0 _ = refl
-uses-1-lemma idx n eq | or1 neq = absurd (neq eq)
+uses-1-lemma idx n eq with same idx n | inspect (same idx) n
+uses-1-lemma idx n eq | true          | its eq' = refl
+uses-1-lemma idx n eq | false         | its eq'  = absurd (same-false idx n eq' eq)
 
 uses-shift-add-lemma : (term : Term) -> (n p m : Nat) -> n < p -> uses (shift (shift-fn-many m (p +_)) term) (m + n) == 0
 uses-shift-add-lemma (var idx) n (succ p) 0 lt = let neq = modus-tollens sym (<-to-not-== (<-incr-r idx lt)) in uses-0-lemma (succ p + idx) n neq
 uses-shift-add-lemma (var 0) n (succ p) (succ m) lt = refl
-uses-shift-add-lemma (var (succ idx)) n (succ p) (succ m) lt = trans uses-step (uses-shift-add-lemma (var idx) n (succ p) m lt)
+uses-shift-add-lemma (var (succ idx)) n (succ p) (succ m) lt = uses-shift-add-lemma (var idx) n (succ p) m lt
 uses-shift-add-lemma (lam bod) n (succ p) m lt = uses-shift-add-lemma bod n (succ p) (succ m) lt
 uses-shift-add-lemma (app fun arg) n (succ p) m lt = trans (cong (_+ uses (shift (shift-fn-many m (succ p +_)) arg) (m + n)) (uses-shift-add-lemma fun n (succ p) m lt)) (uses-shift-add-lemma arg n (succ p) m lt)
 
@@ -294,15 +278,13 @@ var-uses<=1 : {idx n : Nat} -> uses (var idx) n <= 1
 var-uses<=1 {0} {0} = <=-refl'
 var-uses<=1 {0} {succ n} = <=zero
 var-uses<=1 {succ idx} {0} = <=zero
-var-uses<=1 {succ idx} {succ n} = <=-trans (<=-refl uses-step) var-uses<=1
+var-uses<=1 {succ idx} {succ n} = var-uses<=1 {idx} {n}
 
 uses-add-lemma : (term : Term) → (n m p : Nat) → m <= n → uses (shift (shift-fn-many m (p +_)) term) (p + n) == uses term n
 uses-add-lemma (var idx) n 0 0 _ = refl
 uses-add-lemma (var idx) n 0 (succ p) _ =
     uses (var (succ p + idx)) (succ p + n) 
   ==[]
-    uses (var (succ p + idx)) (succ p + n) 
-  ==[ uses-step ]
     uses (var (p + idx)) (p + n)
   ==[ uses-add-lemma (var idx) n 0 p <=zero ]
     uses (var idx) n
@@ -368,7 +350,7 @@ uses-subst-0 n (succ m) arg (var (succ idx)) pf =
     uses (shift succ (at m arg idx)) (succ m + n)
   ==[ uses-succ (at m arg idx) (m + n) ]
     uses (at m arg idx) (m + n)
-  ==[ uses-subst-0 n m arg (var idx) (trans (sym uses-step) pf) ]
+  ==[ uses-subst-0 n m arg (var idx) pf ]
     uses (var idx) (succ m + n)
   ==[ sym (uses-succ (var idx) (succ m + n)) ]
     uses (var (succ idx)) (succ (succ m + n))
@@ -393,7 +375,7 @@ uses-subst-1 n (succ m) arg (var (succ idx)) pf =
     uses (shift succ (at m arg idx)) (succ m + n)
   ==[ uses-succ (at m arg idx) (m + n) ]
     uses (at m arg idx) (m + n)
-  ==[ uses-subst-1 n m arg (var idx) (trans (sym uses-step) pf) ]
+  ==[ uses-subst-1 n m arg (var idx) pf ]
     uses (var idx) (succ m + n) + uses arg n
   ==[ cong (_+ uses arg n) (sym (uses-succ (var idx) (succ m + n))) ]
     uses (var (succ idx)) (succ (succ m + n)) + uses arg n
@@ -503,32 +485,31 @@ uses-subst-lemma n m lt arg (app fun arg') =
   in <=-trans (<=-cong-add-r term2 rec1) (<=-cong-add-l term1 rec2)
 
 uses-shift-succ1 : (term : Term) -> (m p : Nat) -> uses (shift (shift-fn-many (succ p + m) succ) term) p == uses term p
-uses-shift-succ1 (var idx) m p with ==dec idx p | <=-trichotomy idx p
-...               | or0 refl | _ =
+uses-shift-succ1 (var idx) m p with <=-trichotomy idx p
+...               | or0 refl =
   begin
     uses (var (shift-fn-many (succ idx + m) succ idx)) idx
   ==[ cong (λ x → uses (var x) idx) (shift-fn-lemma2 succ idx (succ idx + m) (<=-incr-r m <=-refl')) ]
     uses (var idx) idx
-  ==[ uses-1-lemma idx idx refl ]
-    1
   qed
-...               | or1 neq | or1 (or0 1+idx<=p) =
+...               | or1 (or0 1+idx<=p) =
   begin
     uses (var (shift-fn-many (succ p + m) succ idx)) p
   ==[ cong (λ x → uses (var x) p) (shift-fn-lemma2 succ idx (succ p + m) (<=-incr-r m (<=-incr-l 1 1+idx<=p)))  ]
     uses (var idx) p
-  ==[ uses-0-lemma idx p neq ]
-    0
   qed
-...               | or1 neq | or1 (or1 1+p<=idx) =
-  let case1 x = trans (cong (λ x → uses (var x) p) x) (uses-0-lemma idx p neq)
-      case2 x = trans (cong (λ x → uses (var x) p) x) (uses-0-lemma (succ idx) p (modus-tollens sym (<-to-not-== (<=-to-< (<=-incr-l 1 1+p<=idx)))))
+...               | or1 (or1 1+p<=idx) =
+  let idx!=p = modus-tollens sym (<-to-not-== (<=-to-< 1+p<=idx))
+      idx!=1+p = modus-tollens sym (<-to-not-== (<=-to-< (<=-incr-l 1 1+p<=idx)))
+      case1 x = trans (cong (λ x → uses (var x) p) x) (uses-0-lemma idx p idx!=p)
+      case2 x = trans (cong (λ x → uses (var x) p) x) (uses-0-lemma (succ idx) p idx!=1+p)
   in begin
     uses (var (shift-fn-many (succ p + m) succ idx)) p
   ==[ case-or (shift-fn-lemma3 idx (succ p + m) 1) case1 case2 ]
     0
+  ==[ sym (uses-0-lemma idx p idx!=p) ]
+    uses (var idx) p
   qed
-...               | or1 neq | (or0 refl) = absurd (neq refl)
 uses-shift-succ1 (lam bod) m p = uses-shift-succ1 bod m (succ p)
 uses-shift-succ1 (app fun arg) m p = trans (cong (_+ uses (shift (shift-fn-many (succ p + m) succ) arg) p) (uses-shift-succ1 fun m p)) (cong (uses fun p +_) (uses-shift-succ1 arg m p))
 
@@ -544,7 +525,7 @@ reduce-affine-lemma : (arg bod : Term) → IsAffine arg → IsAffine bod → (m 
 reduce-affine-lemma arg (var 0) arg-af _ 0 _ = arg-af
 reduce-affine-lemma arg (var 0) arg-af _ (succ m) _ = var-affine
 reduce-affine-lemma arg (var (succ idx)) arg-af _ 0 _ = var-affine
-reduce-affine-lemma arg (var (succ idx)) arg-af _ (succ m) pf = shift-succ-affine (at m arg idx) (reduce-affine-lemma arg (var idx) arg-af var-affine m var-uses<=1)
+reduce-affine-lemma arg (var (succ idx)) arg-af _ (succ m) pf = shift-succ-affine (at m arg idx) (reduce-affine-lemma arg (var idx) arg-af var-affine m (var-uses<=1 {idx} {m}))
 reduce-affine-lemma arg (lam bod) arg-af (lam-affine leq bod-af) m pf =
   lam-affine (<=-trans (uses-subst-lemma 0 (succ m) <zero arg bod) leq) (reduce-affine-lemma arg bod arg-af bod-af (succ m) pf)
 reduce-affine-lemma arg (app fun arg') arg-af (app-affine fun-af arg'-af) m pf =

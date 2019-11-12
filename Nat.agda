@@ -51,7 +51,7 @@ pred 0 = 0
 pred (succ n) = n
 
 succ-inj : {a b : Nat} -> (succ a) == (succ b) -> a == b
-succ-inj eq = cong pred eq 
+succ-inj eq = cong pred eq
 
 succ-inj' : {a b : Nat} -> Not(a == b) -> Not((succ a) == (succ b))
 succ-inj' = modus-tollens succ-inj
@@ -73,6 +73,13 @@ same 0     (succ m) = false
 same (succ n) 0     = false
 same (succ n) (succ m) = same n m
 {-# BUILTIN NATEQUALS same #-}
+
+same-true : (a b : Nat) -> same a b == true -> a == b
+same-true 0 0 _ = refl
+same-true (succ a) (succ b) eq = cong succ (same-true a b eq)
+
+same-false : (a b : Nat) -> same a b == false -> Not(a == b)
+same-false (succ a) (succ b) eq refl = same-false a b eq refl
 
 -- Arithmetic properties
 -- A number added to 0 is the same number
@@ -155,7 +162,7 @@ add-inner-swap a b c d =
 mul-n-0 : (n : Nat) -> (n * 0) == 0
 mul-n-0 0 = refl
 mul-n-0 (succ n) = mul-n-0 n
- 
+
 mul-n-1 : (n : Nat) -> (n * 1) == n
 mul-n-1 0 = refl
 mul-n-1 (succ n) = cong succ (mul-n-1 n)
@@ -176,7 +183,7 @@ mul-n-succ (succ n) m =
   ==[]
     ((succ n) + ((succ n) * m))
   qed
- 
+
 mul-comm : (a b : Nat) -> (a * b) == (b * a)
 mul-comm 0 b = sym (mul-n-0 b)
 mul-comm (succ a) b =
@@ -205,7 +212,7 @@ mul-leftdist (succ a) b c =
     (((succ a) * b) + ((succ a) * c))
   qed
 
- 
+
 mul-rightdist : (a b c : Nat) -> ((a + b) * c) == ((a * c) + (b * c))
 mul-rightdist a b c =
   begin
@@ -289,7 +296,7 @@ fact a b pf | sigma x (or1 (and eq1 eq2)) =
 -- Less-than-or-equal
 data _<=_ : (a b : Nat) → Set where
   <=zero : ∀ {a} → 0 <= a
-  <=succ : ∀ {a b} → a <= b → succ a <= succ b 
+  <=succ : ∀ {a b} → a <= b → succ a <= succ b
 
 -- An alternative definition of `a <= b` which is really useful is `exists x : Nat, a + x = b` therefore we can write the following functions:
 <=-add-get : {a b : Nat} -> a <= b -> Sum Nat (λ (x : Nat) -> (a + x) == b)
@@ -334,7 +341,7 @@ data _<=_ : (a b : Nat) → Set where
       case!= x = case-or x case<= case>=
   in case-or (<=-trichotomy a b) case== case!=
 
-succ-not-<=-0 : {a : Nat} -> Not ((succ a) <= 0) 
+succ-not-<=-0 : {a : Nat} -> Not ((succ a) <= 0)
 succ-not-<=-0 ()
 
 succ-strict : {a b : Nat} -> (succ a) <= (succ b) -> a <= b
@@ -380,7 +387,7 @@ x qed<=  =  <=-refl'
 -- Less-than
 data _<_ : (a : Nat) → (b : Nat) → Set where
   <zero : ∀ {a} → 0 < succ a
-  <succ : ∀ {a b} → a < b → succ a < succ b 
+  <succ : ∀ {a b} → a < b → succ a < succ b
 
 n-<-succ : {n : Nat} -> n < succ(n)
 n-<-succ {0} = <zero
@@ -562,12 +569,12 @@ x qed<  =  <=-refl'
   sigma y c*y==d = <=-add-get pf2
   witness = (a * y) + ((x * c) + (x * y))
   -- Steps needed to prove equality
-  step1 = add-assoc (a * c) (a * y) ((x * c) + (x * y)) 
-  step2 = cong (_+ ((x * c) + (x * y))) (sym (mul-leftdist a c y)) 
-  step3 = cong ((a * (c + y)) +_) (sym (mul-leftdist x c y)) 
-  step4 = (sym (mul-rightdist a x (c + y))) 
-  step5 = cong (_* (c + y)) a*x==b 
-  step6 = cong (b *_) c*y==d 
+  step1 = add-assoc (a * c) (a * y) ((x * c) + (x * y))
+  step2 = cong (_+ ((x * c) + (x * y))) (sym (mul-leftdist a c y))
+  step3 = cong ((a * (c + y)) +_) (sym (mul-leftdist x c y))
+  step4 = (sym (mul-rightdist a x (c + y)))
+  step5 = cong (_* (c + y)) a*x==b
+  step6 = cong (b *_) c*y==d
   eq =
     begin
       (a * c) + ((a * y) + ((x * c) + (x * y)))

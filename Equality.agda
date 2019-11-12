@@ -24,3 +24,10 @@ rwt P refl p = p
 -- Leibniz rule
 leibniz : {A : Set} (x y : A) -> ((P : A -> Set) -> P x -> P y) -> x == y
 leibniz a b H = H (_==_ a) refl
+
+-- This enables the "inspect idiom", which isn't built-in
+module _ {A : Set} {B : A → Set} where
+  data Graph (f : ∀ x → B x) (x : A) (y : B x) : Set where
+    its : f x == y → Graph f x y
+  inspect : (f : ∀ x → B x) (x : A) → Graph f x (f x)
+  inspect _ _ = its refl

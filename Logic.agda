@@ -1,5 +1,9 @@
 module Logic where
 
+-- This enables the "case-of idiom", which isn't built-in
+case_of_ : ∀ {a b} {A : Set a} {B : Set b} → A → (A → B) → B
+case x of f = f x
+
 -- Empty set
 data Empty : Set where
 
