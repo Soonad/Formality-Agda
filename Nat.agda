@@ -288,7 +288,7 @@ fact a b pf | sigma x (or1 (and eq1 eq2)) =
 
 -- Less-than-or-equal
 data _<=_ : (a b : Nat) → Set where
-  <=zero : ∀ a → 0 <= a
+  <=zero : ∀ {a} → 0 <= a
   <=succ : ∀ {a b} → a <= b → succ a <= succ b 
 
 -- An alternative definition of `a <= b` which is really useful is `exists x : Nat, a + x = b` therefore we can write the following functions:
@@ -299,34 +299,34 @@ data _<=_ : (a b : Nat) → Set where
   in sigma x (cong succ pf)
 
 <=-add : {a b : Nat} (x : Nat) -> (a + x) == b -> a <= b
-<=-add {0} {b} _ _ = <=zero b
+<=-add {0} {b} _ _ = <=zero
 <=-add {succ a} {succ b} x eq = <=succ (<=-add x (succ-inj eq))
 
 -- Less-than-or-equal properties
 <=-refl : {a b : Nat} -> a == b -> a <= b
-<=-refl {0} {0} _ = <=zero 0
+<=-refl {0} {0} _ = <=zero
 <=-refl {succ a} {succ b} eq = <=succ (<=-refl (succ-inj eq))
 
 <=-refl' : {a : Nat} -> a <= a
 <=-refl' = <=-refl refl
 
 <=-trans : {a b c : Nat} -> a <= b -> b <= c -> a <= c
-<=-trans {a} {b} {c} (<=zero b) _ = (<=zero c)
+<=-trans {a} {b} {c} <=zero _ = <=zero
 <=-trans (<=succ pfa) (<=succ pfb) = <=succ (<=-trans pfa pfb)
 
 <=-antisym : {a b : Nat} -> a <= b -> b <= a -> a == b
-<=-antisym (<=zero 0) (<=zero 0) = refl
+<=-antisym <=zero <=zero = refl
 <=-antisym (<=succ pfa) (<=succ pfb) = cong succ (<=-antisym pfa pfb)
 
 <=-total : (a b : Nat) -> Or (a <= b) (succ b <= a)
-<=-total 0 b = or0 (<=zero b)
-<=-total (succ a) 0 = or1 (<=succ (<=zero a))
+<=-total 0 b = or0 <=zero
+<=-total (succ a) 0 = or1 (<=succ <=zero)
 <=-total (succ a) (succ b) = case-or (<=-total a b) (λ x -> or0 (<=succ x)) (λ x -> or1 (<=succ x))
 
 <=-trichotomy : (a b : Nat) -> Or (a == b) (Or (succ a <= b) (succ b <= a))
 <=-trichotomy 0 0 = or0 refl
-<=-trichotomy (succ a) 0 = or1 (or1 (<=succ (<=zero a)))
-<=-trichotomy 0 (succ b) = or1 (or0 (<=succ (<=zero b)))
+<=-trichotomy (succ a) 0 = or1 (or1 (<=succ <=zero))
+<=-trichotomy 0 (succ b) = or1 (or0 (<=succ <=zero))
 <=-trichotomy (succ a) (succ b) =
   let case== x = or0 (cong succ x)
       case<= x = or1 (or0 (<=succ x))
@@ -341,12 +341,12 @@ succ-strict : {a b : Nat} -> (succ a) <= (succ b) -> a <= b
 succ-strict (<=succ pf) = pf
 
 <=-dec : (a b : Nat) -> Or (a <= b) (Not (a <= b))
-<=-dec zero b = or0 (<=zero b)
+<=-dec zero b = or0 <=zero
 <=-dec (succ a) zero = or1 succ-not-<=-0
 <=-dec (succ a) (succ b) = case-or (<=-dec a b) (λ x -> or0 (<=succ x)) (λ x -> or1 (λ pf -> x (succ-strict pf)))
 
 <=-bottom : {a : Nat} -> a <= 0 -> a == 0
-<=-bottom {0} (<=zero 0) = refl
+<=-bottom {0} <=zero = refl
 
 -- Less-than-or-equal-to Reasoning
 infix  1 begin<=_
@@ -379,45 +379,48 @@ x qed<=  =  <=-refl'
 
 -- Less-than
 data _<_ : (a : Nat) → (b : Nat) → Set where
-  <zero : ∀ a → 0 < succ a
+  <zero : ∀ {a} → 0 < succ a
   <succ : ∀ {a b} → a < b → succ a < succ b 
 
 n-<-succ : {n : Nat} -> n < succ(n)
-n-<-succ {0} = <zero 0
+n-<-succ {0} = <zero
 n-<-succ {succ n} = <succ n-<-succ
 
 not-n-<-0 : {n : Nat} -> n < 0 -> Empty
 not-n-<-0 ()
 
+<-to-not-== : {a b : Nat} -> a < b -> Not(a == b)
+<-to-not-== (<succ lt) refl = <-to-not-== lt refl
+
 <-to-<= : {a b : Nat} -> a < b -> (succ a) <= b
-<-to-<= {0} {(succ b)} (<zero b) = <=succ (<=zero b)
+<-to-<= {0} {(succ b)} <zero = <=succ <=zero
 <-to-<= {succ a} {succ b} (<succ pf) = <=succ (<-to-<= pf)
 
 <-to-<=' : {a b : Nat} -> a < (succ b) -> a <= b
-<-to-<=' {0} {b} (<zero b) = <=zero b
+<-to-<=' {0} {b} <zero = <=zero
 <-to-<=' {succ a} {succ b} (<succ pf) = <=succ (<-to-<=' pf)
 
 <=-to-< : {a b : Nat} -> (succ a) <= b -> a < b
-<=-to-< {zero} {succ b} _ = <zero b
+<=-to-< {zero} {succ b} _ = <zero
 <=-to-< {succ a} {succ b} (<=succ pf) = <succ (<=-to-< pf)
 
 <=-to-<' : {a b : Nat} -> a <= b -> a < (succ b)
-<=-to-<' {zero} {b} _ = <zero b
+<=-to-<' {zero} {b} _ = <zero
 <=-to-<' {succ a} {succ b} (<=succ pf) = <succ (<=-to-<' pf)
 
 <=-is-<-or-== : {a b : Nat} -> a <= b -> Or (a < b) (a == b)
 <=-is-<-or-== {zero}   {zero}   _           = or1 refl
-<=-is-<-or-== {zero}   {succ b} _           = or0 (<zero b)
+<=-is-<-or-== {zero}   {succ b} _           = or0 <zero
 <=-is-<-or-== {succ a} {succ b} (<=succ pf) = case-or (<=-is-<-or-== pf) (λ x -> or0 (<succ x)) (λ x -> or1 (cong succ x))
 
 <-stronger-<= : {a b : Nat} -> a < b -> a <= b
-<-stronger-<= {0} {(succ b)} (<zero b) = <=zero (succ b)
+<-stronger-<= {0} {(succ b)} <zero = <=zero
 <-stronger-<= {succ a} {succ b} (<succ pf) = <=succ (<-stronger-<= pf)
 
 nat-trichotomy : (a b : Nat) -> Or (a == b) (Or (a < b) (b < a))
 nat-trichotomy 0 0 = or0 refl
-nat-trichotomy (succ a) 0 = or1 (or1 (<zero a))
-nat-trichotomy 0 (succ b) = or1 (or0 (<zero b))
+nat-trichotomy (succ a) 0 = or1 (or1 <zero)
+nat-trichotomy 0 (succ b) = or1 (or0 <zero)
 nat-trichotomy (succ a) (succ b) =
   let case== x = or0 (cong succ x)
       case< x = or1 (or0 (<succ x))
@@ -437,8 +440,8 @@ nat-trichotomy (succ a) (succ b) =
 <-to-not->= {succ a} {succ b} (<succ pf1) pf2 = <-to-not->= pf1 (succ-strict pf2) -- all other cases are inconsistent
 
 not->=-to-< : {a b : Nat} -> Not(b <= a) -> a < b
-not->=-to-< {a} {zero} neg = absurd (neg (<=zero a))
-not->=-to-< {zero} {succ b} _ = <zero b
+not->=-to-< {a} {zero} neg = absurd (neg <=zero)
+not->=-to-< {zero} {succ b} _ = <zero
 not->=-to-< {succ a} {succ b} neg = <succ (not->=-to-< (λ (pf : b <= a) -> neg (<=succ pf)))
 
 <-comb-<= : {a b c : Nat} -> a < b -> b <= c -> a < c
@@ -536,11 +539,18 @@ x qed<  =  <=-refl'
 <=-cong-add-l : ∀ {a b} (c : Nat) → a <= b → (c + a) <= (c + b)
 <=-cong-add-l c pf = <=-additive (<=-refl' {c}) pf
 
+<=-cancel-add-l : ∀ {a b} (c : Nat) → (c + a) <= (c + b) → a <= b
+<=-cancel-add-l 0 leq = leq
+<=-cancel-add-l (succ c) (<=succ leq) = <=-cancel-add-l c leq
+
+<=-cancel-add-r : ∀ {a b} (c : Nat) → (a + c) <= (b + c) → a <= b
+<=-cancel-add-r {a} {b} c leq = <=-cancel-add-l c (<=-trans (<=-trans (<=-refl (add-comm c a)) leq) (<=-refl (add-comm b c)))
+
 <=-incr-r : ∀ {a b} → (x : Nat) → a <= b → a <= (b + x)
-<=-incr-r {a} {b} x pf = rwt (_<= (b + x)) (add-n-0 a) (<=-additive pf (<=zero x))
+<=-incr-r {a} {b} x pf = rwt (_<= (b + x)) (add-n-0 a) (<=-additive pf <=zero)
 
 <=-incr-l : ∀ {a b} → (x : Nat) → a <= b → a <= (x + b)
-<=-incr-l {a} {b} x pf = <=-additive (<=zero x) pf
+<=-incr-l {a} {b} x pf = <=-additive <=zero pf
 
 <=-multiplicative : ∀ {a b c d}
           → a <= b
@@ -608,6 +618,12 @@ x qed<  =  <=-refl'
           --------------------
           → (a + c) < (b + d)
 <-additive' {a} {b} {c} {d} pf1 pf2 = rwt ((a + c) <_) (add-comm d b) (rwt (_< (d + b)) (add-comm c a) (<-additive pf2 pf1))
+
+<-incr-r : ∀ {a b} → (x : Nat) → a < b → a < (b + x)
+<-incr-r {a} {b} x pf = rwt (_< (b + x)) (add-n-0 a) (<-additive pf <=zero)
+
+<-incr-l : ∀ {a b} → (x : Nat) → a < b → a < (x + b)
+<-incr-l {a} {b} x pf = <-additive' <=zero pf
 
 -- Strong induction
 <=-induction-lemma : {P : Nat -> Set}
