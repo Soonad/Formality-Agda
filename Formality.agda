@@ -544,14 +544,14 @@ reduce-affine-lemma arg (lam bod) arg-af (lam-affine leq bod-af) m pf =
 reduce-affine-lemma arg (app fun arg') arg-af (app-affine fun-af arg'-af) m pf =
   app-affine (reduce-affine-lemma arg fun arg-af fun-af m (<=-trans (<=-incr-r (uses arg' m) <=-refl') pf)) (reduce-affine-lemma arg arg' arg-af arg'-af m (<=-trans (<=-incr-l (uses fun m) <=-refl') pf))
 
-reduce-affine : (t : Term) → IsAffine t → IsAffine (reduce t)
-reduce-affine (var idx) af = var-affine
-reduce-affine (lam bod) (lam-affine leq bod-af) = lam-affine (<=-trans (reduce-uses 0 bod bod-af) leq) (reduce-affine bod bod-af)
-reduce-affine (app (var idx) arg) (app-affine _ arg-af) = app-affine var-affine (reduce-affine arg arg-af)
-reduce-affine (app (app ffun farg) arg) (app-affine fun-af arg-af) = app-affine (reduce-affine (app ffun farg) fun-af) (reduce-affine arg arg-af)
-reduce-affine (app (lam bod) arg) (app-affine (lam-affine leq bod-af) arg-af) =
-  let red-arg-af = (reduce-affine arg arg-af)
-      red-bod-af = (reduce-affine bod bod-af)
+reduce-affine : {t : Term} → IsAffine t → IsAffine (reduce t)
+reduce-affine {var idx} af = var-affine
+reduce-affine {lam bod} (lam-affine leq bod-af) = lam-affine (<=-trans (reduce-uses 0 bod bod-af) leq) (reduce-affine bod-af)
+reduce-affine {app (var idx) arg} (app-affine _ arg-af) = app-affine var-affine (reduce-affine arg-af)
+reduce-affine {app (app ffun farg) arg} (app-affine fun-af arg-af) = app-affine (reduce-affine fun-af) (reduce-affine arg-af)
+reduce-affine {app (lam bod) arg} (app-affine (lam-affine leq bod-af) arg-af) =
+  let red-arg-af = (reduce-affine arg-af)
+      red-bod-af = (reduce-affine bod-af)
   in reduce-affine-lemma (reduce arg) (reduce bod) red-arg-af red-bod-af 0 (<=-trans (reduce-uses 0 bod bod-af) leq)
 
 -- Reducing an affine term either reduces its size or keeps it the same
@@ -648,15 +648,32 @@ reduce-fix' t af eq = noredex-is-normal t (λ hasredex → <-to-not-== (reduce< 
 normalize-aux : (t : Term) → IsAffine t → (len : Nat) → Acc len → len == size t → Term
 normalize-aux t af len ac       eq with normal-or-hasredex t
 normalize-aux t af len ac       eq | or0 _ = t
-normalize-aux t af len (acc pf) eq | or1 hasredex = normalize-aux (reduce t) (reduce-affine t af) (size (reduce t)) (pf _ (rwt (size (reduce t) <_) (sym eq) (reduce< t af hasredex))) refl
-
-normalize-theorem-aux : (t : Term) → (af : IsAffine t) → (len : Nat) → (ac : Acc len) → (eq : len == size t) → IsNormal (normalize-aux t af len ac eq)
-normalize-theorem-aux t af len ac       eq with normal-or-hasredex t
-normalize-theorem-aux t af len ac       eq | or0 normal = normal
-normalize-theorem-aux t af len (acc pf) eq | or1 hasredex = normalize-theorem-aux (reduce t) (reduce-affine t af) (size (reduce t)) (pf _ (rwt (size (reduce t) <_) (sym eq) (reduce< t af hasredex))) refl
+normalize-aux t af len (acc pf) eq | or1 hasredex = normalize-aux (reduce t) (reduce-affine af) (size (reduce t)) (pf _ (rwt (size (reduce t) <_) (sym eq) (reduce< t af hasredex))) refl
 
 normalize : (t : Term) → IsAffine t  → Term
 normalize t af = normalize-aux t af (size t) (<-wf (size t)) refl
 
 normalize-theorem : (t : Term) → (af : IsAffine t)  → IsNormal (normalize t af)
-normalize-theorem t af = normalize-theorem-aux t af (size t) (<-wf (size t)) refl
+normalize-theorem t af = go t af (size t) (<-wf (size t)) refl
+  where
+  go : (t : Term) → (af : IsAffine t) → (len : Nat) → (ac : Acc len) → (eq : len == size t) → IsNormal (normalize-aux t af len ac eq)
+  go t af len ac       eq with normal-or-hasredex t
+  go t af len ac       eq | or0 normal = normal
+  go t af len (acc pf) eq | or1 hasredex = go (reduce t) (reduce-affine af) (size (reduce t)) (pf _ (rwt (size (reduce t) <_) (sym eq) (reduce< t af hasredex))) refl
+
+normalize-is-reduce : (t : Term) → (af : IsAffine t) → Sum Nat (λ x → normalize t af == pow reduce x t)
+normalize-is-reduce t af =
+  let sigma x eq = go t af (size t) (<-wf (size t)) refl
+  in sigma x (trans eq (sym (pow==pow' reduce x t)))
+  where
+  go : (t : Term) → (af : IsAffine t) → (len : Nat) → (ac : Acc len) → (eq : len == size t) → Sum Nat (λ x → normalize-aux t af len ac eq == pow' reduce x t)
+  go t af len ac       eq with normal-or-hasredex t
+  go t af len ac       eq | or0 normal = sigma 0 refl
+  go t af len (acc pf) eq | or1 hasredex =
+    let sigma x eq' = go (reduce t) (reduce-affine af) (size (reduce t)) (pf _ (rwt (size (reduce t) <_) (sym eq) (reduce< t af hasredex))) refl
+    in sigma (succ x) eq'
+
+normalize-base : (t : Term) → (af : IsAffine t) → IsNormal t → normalize t af == t
+normalize-base t af norm with normal-or-hasredex t
+normalize-base t af norm | or0 _ = refl
+normalize-base t af norm | or1 hasredex = absurd (normal-has-noredex t norm hasredex)
