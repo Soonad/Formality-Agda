@@ -622,3 +622,12 @@ reduce< (app (lam fbod) arg) (app-affine (lam-affine leq af-bod) af-arg) foundre
   <=[]
     size (app (lam fbod) arg)
   qed<
+
+reduce-fix : (t : Term) → IsNormal t → reduce t == t
+reduce-fix (var idx) _ = refl
+reduce-fix (lam bod) (lam-normal bod-norm) = cong lam (reduce-fix bod bod-norm)
+reduce-fix (app (var idx) arg) (app-var-normal arg-norm) = cong (λ x → app (var idx) x) (reduce-fix arg arg-norm)
+reduce-fix (app (app fun arg') arg) (app-app-normal app-norm arg-norm) = trans (cong (λ x → app x (reduce arg)) (reduce-fix (app fun arg') app-norm)) (cong (λ x → app (app fun arg') x) (reduce-fix arg arg-norm))
+
+reduce-fix' : (t : Term) → IsAffine t → reduce t == t → IsNormal t
+reduce-fix' t af eq = noredex-is-normal t (λ hasredex → <-to-not-== (reduce< t af hasredex) (cong size eq))

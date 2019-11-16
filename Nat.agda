@@ -483,6 +483,9 @@ not->=-to-< {succ a} {succ b} neg = <succ (not->=-to-< (λ (pf : b <= a) -> neg 
     qed
   in <-add (x + y) eq
 
+<-trans : {a b c : Nat} → a < b → b < c → a < c
+<-trans a<b b<c = <-comb-<= a<b (<-stronger-<= b<c)
+
 -- Less-than Reasoning: requires proving only one < statement in the whole reasoning chain. The rest can be proven by weaker <= statements
 infix  1 begin<_
 infixr 2 _<[_]_ _<='[_]_ _<='[]_
@@ -659,3 +662,32 @@ x qed<  =  <=-refl'
   base = <-step 0 (λ n n<0 -> absurd (not-n-<-0 n<0))
   step = λ n pf -> <-step (succ n) (λ m m<1+n -> pf m (<-to-<=' m<1+n))
   in <=-induction base step
+
+-- Well-founded induction (<= version)
+data Acc : (n : Nat) → Set where
+  acc-0    : Acc 0
+  acc-succ : {n : Nat} → (∀ m → m <= n → Acc m) → Acc (succ n)
+
+<=-wf : ∀ n → Acc n
+<=-wf n = go n n <=-refl'
+  where
+  go : ∀ n m → m <= n → Acc m
+  go n        0        _             = acc-0
+  go (succ n) (succ m) (<=succ m<=n) = acc-succ λ {0 _ → acc-0; (succ p) leq → go n (succ p) (<=-trans leq m<=n)}
+
+half : Nat -> Nat
+half 0 = 0
+half 1 = 1
+half (succ (succ x)) = succ (half x)
+
+half-<= : ∀ n → half n <= n
+half-<= 0 = <=-refl'
+half-<= 1 = <=-refl'
+half-<= (succ (succ x)) = <=-incr-l 1 (<=succ (half-<= x))
+
+example-wf : Nat → Nat
+example-wf n = go n (<=-wf n)
+  where
+  go : ∀ n → Acc n → Nat
+  go zero     _       = 0
+  go (succ n) (acc-succ a) = go (half n) (a _ (half-<= n))
