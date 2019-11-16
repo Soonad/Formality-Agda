@@ -663,15 +663,26 @@ x qed<  =  <=-refl'
   step = λ n pf -> <-step (succ n) (λ m m<1+n -> pf m (<-to-<=' m<1+n))
   in <=-induction base step
 
--- Well-founded induction (<= version)
-data Acc : (n : Nat) → Set where
-  acc-0    : Acc 0
-  acc-succ : {n : Nat} → (∀ m → m <= n → Acc m) → Acc (succ n)
+-- Well-founded induction
+data Acc (n : Nat) : Set where
+  acc : (∀ m → m < n → Acc m) → Acc n
 
-<=-wf : ∀ n → Acc n
+<-wf : ∀ n → Acc n
+<-wf n = acc (go n)
+  where
+  go : ∀ n m → m < n → Acc m
+  go (succ n) zero     _           = acc (λ _ ())
+  go (succ n) (succ m) (<succ m<n) = acc (λ o o<sm → go n o (<-comb-<= o<sm (<-to-<= m<n)))
+
+-- Well-founded induction (<= version)
+data Acc<= : (n : Nat) → Set where
+  acc-0    : Acc<= 0
+  acc-succ : {n : Nat} → (∀ m → m <= n → Acc<= m) → Acc<= (succ n)
+
+<=-wf : ∀ n → Acc<= n
 <=-wf n = go n n <=-refl'
   where
-  go : ∀ n m → m <= n → Acc m
+  go : ∀ n m → m <= n → Acc<= m
   go n        0        _             = acc-0
   go (succ n) (succ m) (<=succ m<=n) = acc-succ λ {0 _ → acc-0; (succ p) leq → go n (succ p) (<=-trans leq m<=n)}
 
@@ -688,6 +699,6 @@ half-<= (succ (succ x)) = <=-incr-l 1 (<=succ (half-<= x))
 example-wf : Nat → Nat
 example-wf n = go n (<=-wf n)
   where
-  go : ∀ n → Acc n → Nat
+  go : ∀ n → Acc<= n → Nat
   go zero     _       = 0
-  go (succ n) (acc-succ a) = go (half n) (a _ (half-<= n))
+  go (succ n) (acc-succ a) = succ (go (half n) (a _ (half-<= n)))

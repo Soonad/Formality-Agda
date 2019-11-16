@@ -110,6 +110,19 @@ noredex-is-normal (app (var idx) arg) noredex = app-var-normal (noredex-is-norma
 noredex-is-normal (app (app ffun farg) arg) noredex = app-app-normal (noredex-is-normal (app ffun farg) (λ x → noredex (app-redex (or0 x)))) (noredex-is-normal arg (λ x → noredex (app-redex (or1 x))))
 noredex-is-normal (app (lam bod) arg) noredex = absurd (noredex found-redex)
 
+-- A term is either normal or has a redex
+normal-or-hasredex : (t : Term) → Or (IsNormal t) (HasRedex t)
+normal-or-hasredex (var idx) = or0 var-normal
+normal-or-hasredex (lam bod) = case-or (normal-or-hasredex bod) (λ x → or0 (lam-normal x)) (λ x → or1 (lam-redex x))
+normal-or-hasredex (app (lam bod) arg) = or1 found-redex
+normal-or-hasredex (app (var idx) arg) = case-or (normal-or-hasredex arg) (λ x → or0 (app-var-normal x)) (λ x → or1 (app-redex (or1 x)))
+normal-or-hasredex (app (app fun arg') arg) =
+  case-or (normal-or-hasredex arg)
+          (λ x → case-or (normal-or-hasredex (app fun arg'))
+                 (λ y → or0 (app-app-normal y x))
+                 (λ y → or1 (app-redex (or0 y))))
+          (λ x → or1 (app-redex (or1 x)))
+
 -- Computes the number of redexes in a term
 redexes : (t : Term) → Nat
 redexes (var idx)                 = 0
@@ -631,3 +644,19 @@ reduce-fix (app (app fun arg') arg) (app-app-normal app-norm arg-norm) = trans (
 
 reduce-fix' : (t : Term) → IsAffine t → reduce t == t → IsNormal t
 reduce-fix' t af eq = noredex-is-normal t (λ hasredex → <-to-not-== (reduce< t af hasredex) (cong size eq))
+
+normalize-aux : (t : Term) → IsAffine t → (len : Nat) → Acc len → len == size t → Term
+normalize-aux t af len ac       eq with normal-or-hasredex t
+normalize-aux t af len ac       eq | or0 _ = t
+normalize-aux t af len (acc pf) eq | or1 hasredex = normalize-aux (reduce t) (reduce-affine t af) (size (reduce t)) (pf _ (rwt (size (reduce t) <_) (sym eq) (reduce< t af hasredex))) refl
+
+normalize-theorem-aux : (t : Term) → (af : IsAffine t) → (len : Nat) → (ac : Acc len) → (eq : len == size t) → IsNormal (normalize-aux t af len ac eq)
+normalize-theorem-aux t af len ac       eq with normal-or-hasredex t
+normalize-theorem-aux t af len ac       eq | or0 normal = normal
+normalize-theorem-aux t af len (acc pf) eq | or1 hasredex = normalize-theorem-aux (reduce t) (reduce-affine t af) (size (reduce t)) (pf _ (rwt (size (reduce t) <_) (sym eq) (reduce< t af hasredex))) refl
+
+normalize : (t : Term) → IsAffine t  → Term
+normalize t af = normalize-aux t af (size t) (<-wf (size t)) refl
+
+normalize-theorem : (t : Term) → (af : IsAffine t)  → IsNormal (normalize t af)
+normalize-theorem t af = normalize-theorem-aux t af (size t) (<-wf (size t)) refl
