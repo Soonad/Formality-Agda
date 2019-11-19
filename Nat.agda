@@ -28,7 +28,7 @@ _*_ (succ n) m = m + (n * m)
 _*_ 0     m = 0
 {-# BUILTIN NATTIMES _*_ #-}
 
--- Pow'ers of endofunctions
+-- Powers of endofunctions
 pow : {A : Set} -> (A -> A) -> Nat -> A -> A
 pow f 0 x = x
 pow f (succ n) x = f (pow f n x)

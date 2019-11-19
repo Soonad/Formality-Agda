@@ -41,7 +41,7 @@ subst-fn fn (succ i) = shift succ (fn i)
 -- Substitutes all free vars on term with a substitution map, `fn`
 subst : (Nat -> Term) -> Term -> Term
 subst fn (var i)       = fn i
-subst fn (lam bod)     = lam (subst (subst-fn fn) bod) 
+subst fn (lam bod)     = lam (subst (subst-fn fn) bod)
 subst fn (app fun arg) = app (subst fn fun) (subst fn arg)
 
 -- Creates a substitution map that replaces only one variable
@@ -99,7 +99,7 @@ data HasRedex : (t : Term) → Set where
 normal-has-noredex : (t : Term) → IsNormal t → Not (HasRedex t)
 normal-has-noredex (lam bod) (lam-normal bod-isnormal) (lam-redex bod-hasredex) = normal-has-noredex bod bod-isnormal bod-hasredex
 normal-has-noredex (app (var idx) arg) (app-var-normal arg-isnormal) (app-redex (or1 arg-hasredex)) = normal-has-noredex arg arg-isnormal arg-hasredex
-normal-has-noredex (app (app ffun farg) arg) (app-app-normal fun-isnormal _) (app-redex (or0 fun-hasredex)) = normal-has-noredex (app ffun farg) fun-isnormal fun-hasredex 
+normal-has-noredex (app (app ffun farg) arg) (app-app-normal fun-isnormal _) (app-redex (or0 fun-hasredex)) = normal-has-noredex (app ffun farg) fun-isnormal fun-hasredex
 normal-has-noredex (app (app ffun farg) arg) (app-app-normal _ arg-isnormal) (app-redex (or1 arg-hasredex)) = normal-has-noredex arg arg-isnormal arg-hasredex
 
 -- A term that has no redexes is normal
@@ -231,14 +231,14 @@ shift-preserves-size fn (app fun arg) =
       e = rwt (λ x → (size (shift fn fun) + x) == (size fun + size arg)) (sym b) d
   in  cong succ e
 
--- Helper function 
+-- Helper function
 subst-miss-size : (n : Nat) → (bidx : Nat) → (arg : Term) → Not(bidx == n) → size (at n arg bidx) == 0
 subst-miss-size (succ n) (succ bidx) arg s = trans (shift-preserves-size succ (at n arg bidx)) (subst-miss-size n bidx arg (modus-tollens (cong succ) s))
 subst-miss-size (succ n) zero        arg s = refl
 subst-miss-size zero     (succ bidx) arg s = refl
 subst-miss-size zero     zero        arg s = absurd (s refl)
 
--- Helper function 
+-- Helper function
 subst-hit-size : (n : Nat) → (bidx : Nat) → (arg : Term) → bidx == n → size (at n arg bidx) == size arg
 subst-hit-size (succ n) (succ bidx) arg s = trans (shift-preserves-size succ (at n arg bidx)) (subst-hit-size n bidx arg (succ-inj s))
 subst-hit-size (succ n) zero        arg ()
@@ -296,7 +296,7 @@ var-uses<=1 {succ idx} {succ n} = var-uses<=1 {idx} {n}
 uses-add-lemma : (term : Term) → (n m p : Nat) → m <= n → uses (shift (shift-fn-many m (p +_)) term) (p + n) == uses term n
 uses-add-lemma (var idx) n 0 0 _ = refl
 uses-add-lemma (var idx) n 0 (succ p) _ =
-    uses (var (succ p + idx)) (succ p + n) 
+    uses (var (succ p + idx)) (succ p + n)
   ==[]
     uses (var (p + idx)) (p + n)
   ==[ uses-add-lemma (var idx) n 0 p <=zero ]
@@ -558,7 +558,7 @@ reduce-affine {app (lam bod) arg} (app-affine (lam-affine leq bod-af) arg-af) =
 reduce<= : (t : Term) → IsAffine t → size (reduce t) <= size t
 reduce<= (var idx) _ = <=zero
 reduce<= (lam bod) (lam-affine _ af) = <=succ (reduce<= bod af)
-reduce<= (app (var fidx) arg) (app-affine _ af) = <=succ (reduce<= arg af) 
+reduce<= (app (var fidx) arg) (app-affine _ af) = <=succ (reduce<= arg af)
 reduce<= (app (app ffun farg) arg) (app-affine af-fun af-arg) = <=succ (<=-additive (reduce<= (app ffun farg) af-fun) (reduce<= arg af-arg))
 reduce<= (app (lam fbod) arg) (app-affine (lam-affine leq af-bod) af-arg) =
   let step1 = <=-refl (size-after-subst 0 (reduce fbod) (reduce arg))
@@ -569,7 +569,7 @@ reduce<= (app (lam fbod) arg) (app-affine (lam-affine leq af-bod) af-arg) =
       step6 = <=-cong-add-l (size fbod) (<=-refl (add-n-0 (size arg)))
       step7 = <=-incr-l 2 <=-refl'
   in
-  begin<= 
+  begin<=
     size (reduce (app (lam fbod) arg))
   <=[]
     size (subst (at 0 (reduce arg)) (reduce fbod))
@@ -612,7 +612,7 @@ reduce< (app (lam fbod) arg) (app-affine (lam-affine leq af-bod) af-arg) foundre
       step6 = <=-cong-add-l (size fbod) (<=-refl (add-n-0 (size arg)))
       step7 = <=-incr-l 1 <=-refl'
   in
-  begin< 
+  begin<
     size (reduce (app (lam fbod) arg))
   <='[]
     size (subst (at 0 (reduce arg)) (reduce fbod))
@@ -650,6 +650,12 @@ normalize-aux t af len ac       eq with normal-or-hasredex t
 normalize-aux t af len ac       eq | or0 _ = t
 normalize-aux t af len (acc pf) eq | or1 hasredex = normalize-aux (reduce t) (reduce-affine af) (size (reduce t)) (pf _ (rwt (size (reduce t) <_) (sym eq) (reduce< t af hasredex))) refl
 
+normalize-aux-lemma : (t : Term) → (af : IsAffine t) → (len : Nat) → (ac ac' : Acc len) → (eq eq' : len == size t) → normalize-aux t af len ac eq == normalize-aux t af len ac' eq'
+normalize-aux-lemma t af len ac ac' eq eq' with normal-or-hasredex t
+normalize-aux-lemma t af len ac ac' eq eq' | or0 _ = refl
+normalize-aux-lemma t af len (acc pf) (acc pf') eq eq' | or1 hasredex =
+  normalize-aux-lemma (reduce t) (reduce-affine af) (size (reduce t)) (pf _ (rwt (size (reduce t) <_) (sym eq) (reduce< t af hasredex))) (pf' _ (rwt (size (reduce t) <_) (sym eq') (reduce< t af hasredex))) refl refl
+
 normalize : (t : Term) → IsAffine t  → Term
 normalize t af = normalize-aux t af (size t) (<-wf (size t)) refl
 
@@ -677,3 +683,10 @@ normalize-base : (t : Term) → (af : IsAffine t) → IsNormal t → normalize t
 normalize-base t af norm with normal-or-hasredex t
 normalize-base t af norm | or0 _ = refl
 normalize-base t af norm | or1 hasredex = absurd (normal-has-noredex t norm hasredex)
+
+normalize-step : (t : Term) → (af : IsAffine t) → normalize t af == normalize (reduce t) (reduce-affine af)
+normalize-step t af with normal-or-hasredex t | normal-or-hasredex (reduce t) | inspect normal-or-hasredex (reduce t) | <-wf (size t)
+normalize-step t af | or0 norm                | or0 _                         | _                                     | _ = sym (reduce-fix t norm)
+normalize-step t af | or1 hasredex            | x                             | its refl                              | acc pf =
+  normalize-aux-lemma (reduce t) (reduce-affine af) (size (reduce t)) (pf _ (reduce< t af hasredex)) (<-wf (size (reduce t))) refl refl 
+normalize-step t af | or0 norm                | or1 hasredex                  | _                                     | _ = absurd (normal-has-noredex t norm (rwt HasRedex (reduce-fix t norm) hasredex))
