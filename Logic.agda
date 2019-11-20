@@ -28,6 +28,14 @@ data Bool : Set where
 {-# BUILTIN TRUE  true  #-}
 {-# BUILTIN FALSE false #-}
 
+_&&_ : Bool -> Bool -> Bool
+false && _ = false
+true && x = x
+
+_||_ : Bool -> Bool -> Bool
+true || _ = true
+false || x = x
+
 -- Simple pairs (a.k.a., logical And)
 record And (A : Set) (B : Set) : Set where
   constructor and
