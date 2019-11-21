@@ -1,5 +1,6 @@
 module EAC where
 open import Logic
+open import Maybe
 open import Nat
 open import Equality
 open import EquationalReasoning
@@ -81,10 +82,29 @@ at-level-affine term idx lvl | 0 = true
 at-level-affine term idx lvl | 1 = at-level term idx lvl
 at-level-affine term idx lvl | succ (succ _) = false
 
--- Term is affine and stratified
 data EAC : (t : Term) → Set where
   var-eac : ∀ {a} → EAC (var a)
   lam-eac : ∀ {bod} → at-level-affine bod 0 0 == true → EAC bod -> EAC (lam bod)
   app-eac : ∀ {fun arg} → EAC fun → EAC arg -> EAC (app fun arg)
   box-eac : ∀ {bod} → EAC bod → EAC (box bod)
   dup-eac : ∀ {arg bod} → at-level-affine bod 0 1 == true → at-level-affine bod 1 1 == true → EAC arg → EAC bod → EAC (dup arg bod)
+
+-- Performs a global reduction of all current redexes
+reduce : Term -> Maybe Term
+-- traverses
+reduce (var i)                   = (| (var i) |)
+reduce (lam bod)                 = (| lam (reduce bod) |)
+reduce (box bod)                 = (| box (reduce bod) |)
+reduce (app (var idx) arg)       = (| (app (var idx)) (reduce arg) |)
+reduce (app (app ffun farg) arg) = (| app (reduce (app ffun farg)) (reduce arg) |)
+reduce (dup (var idx) bod)       = (| (dup (var idx)) (reduce bod) |)
+reduce (dup (app fun arg) bod)   = (| dup (reduce (app fun arg)) (reduce bod) |)
+-- swaps
+reduce (app (dup arg arg') bod)  = (| (dup arg (app arg' (shift (2 +_) bod))) |)
+reduce (dup (dup arg arg') bod)  = (| (dup arg (dup arg' (shift (2 +_) bod))) |)
+-- redexes
+reduce (app (lam bod) arg)       = (| (subst (at zero arg) bod) |)
+reduce (dup (box arg) bod)       = (| (subst (at zero arg) (subst (at zero arg) bod)) |)
+-- should not happen
+reduce (app (box bod) arg)       = none
+reduce (dup (lam bod') bod)      = none
