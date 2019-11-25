@@ -55,7 +55,7 @@ reduce : Term -> Term
 reduce (var i)             = var i
 reduce (lam bod)           = lam (reduce bod)
 reduce (app (var idx) arg)       = app (var idx) (reduce arg)
-reduce (app (lam bod) arg) = subst (at zero (reduce arg)) (reduce bod)
+reduce (app (lam bod) arg) = subst (at 0 (reduce arg)) (reduce bod)
 reduce (app (app ffun farg) arg)       = app (reduce (app ffun farg)) (reduce arg)
 
 -- Computes how many times a free variable is used
@@ -134,9 +134,47 @@ redexes (app (app ffun farg) arg) = redexes (app ffun farg) + redexes arg
 -- Directed one step reduction relation, `a ~> b` means term `a` reduces to `b` in one step
 data _~>_ : Term → Term → Set where
   ~beta : ∀ {t u} → app (lam t) u ~> subst (at 0 u) t
-  ~app0 : ∀ {f0 f1 a} → f0 ~> f1 → app f0 a ~> app f1 a
+  ~app0 : ∀ {a f0 f1} → f0 ~> f1 → app f0 a ~> app f1 a
   ~app1 : ∀ {f a0 a1} → a0 ~> a1 → app f a0 ~> app f a1
   ~lam0 : ∀ {b0 b1} → b0 ~> b1 → lam b0 ~> lam b1
+
+-- Directed arbitraty step reduction relation, `a ~>> b` means term `a` reduces to `b` in zero or more steps
+data _~>>_ : Term → Term → Set where
+  ~>>refl  : ∀ {t t'} → t == t' → t ~>> t'
+  ~>>trans : ∀ {t t' t''} → t ~>> t'' → t'' ~>> t' → t ~>> t'
+  ~>>step  : ∀ {t t'} → t ~> t' → t ~>> t'
+
+data Normalizable : (t : Term) → Set where
+  normal-is-normalizable : ∀ {t} → IsNormal t → Normalizable t
+  onestep-normalizable : ∀ {t t'} → t ~> t' → Normalizable t' → Normalizable t
+
+manystep-normalizable : ∀ {t t'} → t ~>> t' → Normalizable t' → Normalizable t
+manystep-normalizable (~>>refl refl)         norm = norm
+manystep-normalizable (~>>step step)         norm = onestep-normalizable step norm
+manystep-normalizable (~>>trans part0 part1) norm = manystep-normalizable part0 (manystep-normalizable part1 norm)
+
+~>>cong : ∀ {bod bod'} → (f : Term → Term) → (∀ {t t'} → t ~> t' → f t ~> f t') → bod ~>> bod' → f bod ~>> f bod'
+~>>cong f pf (~>>refl eq) = ~>>refl (cong f eq)
+~>>cong f pf (~>>trans part0 part1) = ~>>trans (~>>cong f pf part0) (~>>cong f pf part1)
+~>>cong f pf (~>>step x) = ~>>step (pf x)
+
+~>>pow : (f : Term → Term) → (∀ {x} → x ~>> f x) → ∀ {x} n → x ~>> pow f n x
+~>>pow f pf 0 = ~>>refl refl
+~>>pow f pf (succ n) = ~>>trans (~>>pow f pf n) pf
+
+reduce-~>> : ∀ {t} → t ~>> reduce t
+reduce-~>> {var idx} = ~>>refl refl
+reduce-~>> {lam bod} = ~>>cong lam ~lam0 reduce-~>>
+reduce-~>> {app (var idx) arg} = ~>>cong (app (var idx)) ~app1 reduce-~>>
+reduce-~>> {app (lam bod) arg} = let
+  part0 = ~>>cong (λ x → app x arg) ~app0 reduce-~>>
+  part1 = ~>>cong (app (lam (reduce bod))) ~app1 reduce-~>>
+  part2 = ~>>step (~beta {reduce bod} {reduce arg})
+  in ~>>trans part0 (~>>trans part1 part2)
+reduce-~>> {app (app fun arg') arg} = let
+  part0 = ~>>cong (app (app fun arg')) ~app1 reduce-~>>
+  part1 = ~>>cong (λ x → app x (reduce arg)) ~app0 reduce-~>>
+  in ~>>trans part0 part1
 
 -- :::::::::::::::::::::::::
 -- :: Theorems and lemmas ::
@@ -451,7 +489,7 @@ reduce-uses n (app (lam bod) arg) (app-affine (lam-affine eq bod-af) arg-af) =
   begin<=
     uses (reduce (app (lam bod) arg)) n
   <=[]
-    uses (subst (at zero (reduce arg)) (reduce bod)) n
+    uses (subst (at 0 (reduce arg)) (reduce bod)) n
   <=[ reduce-uses-lemma n (reduce arg) (reduce bod) (<=-trans (reduce-uses 0 bod bod-af) eq) ]
      uses (reduce bod) (succ n) + uses (reduce arg) n
   <=[ <=-additive pf1 pf2 ]
@@ -690,3 +728,9 @@ normalize-step t af | or0 norm                | or0 _                         | 
 normalize-step t af | or1 hasredex            | x                             | its refl                              | acc pf =
   normalize-aux-lemma (reduce t) (reduce-affine af) (size (reduce t)) (pf _ (reduce< t af hasredex)) (<-wf (size (reduce t))) refl refl 
 normalize-step t af | or0 norm                | or1 hasredex                  | _                                     | _ = absurd (normal-has-noredex t norm (rwt HasRedex (reduce-fix t norm) hasredex))
+
+affine-normalizable : (t : Term) → IsAffine t → Normalizable t
+affine-normalizable t af =
+  let sigma x eq = normalize-is-reduce t af
+      pf = ~>>pow reduce reduce-~>> x
+  in manystep-normalizable (rwt (t ~>>_) (sym eq) pf) (normal-is-normalizable (normalize-theorem t af))

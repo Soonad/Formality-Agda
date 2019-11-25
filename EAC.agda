@@ -108,3 +108,35 @@ reduce (dup (box arg) bod)       = (| (subst (at zero arg) (subst (at zero arg) 
 -- should not happen
 reduce (app (box bod) arg)       = none
 reduce (dup (lam bod') bod)      = none
+
+-- This term is on normal form
+data IsNormal : (t : Term) → Set where
+  var-normal : ∀ {a} → IsNormal (var a)
+  lam-normal : ∀ {bod} → IsNormal bod -> IsNormal (lam bod)
+  box-normal : ∀ {bod} → IsNormal bod -> IsNormal (box bod)
+  app-var-normal : ∀ {fidx arg} → IsNormal arg -> IsNormal (app (var fidx) arg)
+  app-app-normal : ∀ {ffun farg arg} → IsNormal (app ffun farg) → IsNormal arg -> IsNormal (app (app ffun farg) arg)
+  dup-var-normal : ∀ {fidx arg} → IsNormal arg -> IsNormal (dup (var fidx) arg)
+  dup-app-normal : ∀ {ffun farg arg} → IsNormal (app ffun farg) → IsNormal arg -> IsNormal (dup (app ffun farg) arg)
+
+-- This term has redexes
+data HasRedex : (t : Term) → Set where
+  lam-redex : ∀ {bod} → HasRedex bod -> HasRedex (lam bod)
+  box-redex : ∀ {bod} → HasRedex bod -> HasRedex (box bod)
+  app-redex : ∀ {fun arg} → Or (HasRedex fun) (HasRedex arg) -> HasRedex (app fun arg)
+  dup-redex : ∀ {arg bod} → Or (HasRedex arg) (HasRedex bod) -> HasRedex (dup arg bod)
+  found-app-redex : ∀ {bod arg} → HasRedex (app (lam bod) arg)
+  found-dup-redex : ∀ {bod arg} → HasRedex (dup (box bod) arg)
+  found-app-swap : ∀ {bod arg arg'} → HasRedex (app (dup arg arg') bod)
+  found-dup-swap : ∀ {bod arg arg'} → HasRedex (dup (dup arg arg') bod)
+
+-- A normal term has no redexes
+normal-has-noredex : (t : Term) → IsNormal t → Not (HasRedex t)
+normal-has-noredex (lam bod) (lam-normal bod-isnormal) (lam-redex bod-hasredex) = normal-has-noredex bod bod-isnormal bod-hasredex
+normal-has-noredex (box bod) (box-normal bod-isnormal) (box-redex bod-hasredex) = normal-has-noredex bod bod-isnormal bod-hasredex
+normal-has-noredex (app (var idx) arg) (app-var-normal arg-isnormal) (app-redex (or1 arg-hasredex)) = normal-has-noredex arg arg-isnormal arg-hasredex
+normal-has-noredex (app (app ffun farg) arg) (app-app-normal fun-isnormal _) (app-redex (or0 fun-hasredex)) = normal-has-noredex (app ffun farg) fun-isnormal fun-hasredex
+normal-has-noredex (app (app ffun farg) arg) (app-app-normal _ arg-isnormal) (app-redex (or1 arg-hasredex)) = normal-has-noredex arg arg-isnormal arg-hasredex
+normal-has-noredex (dup (var idx) bod) (dup-var-normal bod-isnormal) (dup-redex (or1 bod-hasredex)) = normal-has-noredex bod bod-isnormal bod-hasredex
+normal-has-noredex (dup (app ffun farg) bod) (dup-app-normal fun-isnormal _) (dup-redex (or0 fun-hasredex)) = normal-has-noredex (app ffun farg) fun-isnormal fun-hasredex
+normal-has-noredex (dup (app ffun farg) bod) (dup-app-normal _ bod-isnormal) (dup-redex (or1 bod-hasredex)) = normal-has-noredex bod bod-isnormal bod-hasredex
