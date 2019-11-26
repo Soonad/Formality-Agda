@@ -105,17 +105,17 @@ normal-has-noredex (app (app ffun farg) arg) (app-app-normal _ arg-isnormal) (ap
 -- A term that has no redexes is normal
 noredex-is-normal : (t : Term) → Not (HasRedex t) → IsNormal t
 noredex-is-normal (var idx) noredex = var-normal
-noredex-is-normal (lam bod) noredex = lam-normal (noredex-is-normal bod (λ x → noredex (lam-redex x)))
-noredex-is-normal (app (var idx) arg) noredex = app-var-normal (noredex-is-normal arg (λ x → noredex (app-redex (or1 x))))
-noredex-is-normal (app (app ffun farg) arg) noredex = app-app-normal (noredex-is-normal (app ffun farg) (λ x → noredex (app-redex (or0 x)))) (noredex-is-normal arg (λ x → noredex (app-redex (or1 x))))
+noredex-is-normal (lam bod) noredex = lam-normal (noredex-is-normal bod (noredex ∘ lam-redex))
+noredex-is-normal (app (var idx) arg) noredex = app-var-normal (noredex-is-normal arg (noredex ∘ (app-redex ∘ or1)))
+noredex-is-normal (app (app ffun farg) arg) noredex = app-app-normal (noredex-is-normal (app ffun farg) (noredex ∘ (app-redex ∘ or0))) (noredex-is-normal arg (noredex ∘ (app-redex ∘ or1)))
 noredex-is-normal (app (lam bod) arg) noredex = absurd (noredex found-redex)
 
 -- A term is either normal or has a redex
 normal-or-hasredex : (t : Term) → Or (IsNormal t) (HasRedex t)
 normal-or-hasredex (var idx) = or0 var-normal
-normal-or-hasredex (lam bod) = case-or (normal-or-hasredex bod) (λ x → or0 (lam-normal x)) (λ x → or1 (lam-redex x))
+normal-or-hasredex (lam bod) = case-or (normal-or-hasredex bod) (or0 ∘ lam-normal) (or1 ∘ lam-redex)
 normal-or-hasredex (app (lam bod) arg) = or1 found-redex
-normal-or-hasredex (app (var idx) arg) = case-or (normal-or-hasredex arg) (λ x → or0 (app-var-normal x)) (λ x → or1 (app-redex (or1 x)))
+normal-or-hasredex (app (var idx) arg) = case-or (normal-or-hasredex arg) (or0 ∘ app-var-normal) (or1 ∘ (app-redex ∘ or1))
 normal-or-hasredex (app (app fun arg') arg) =
   case-or (normal-or-hasredex arg)
           (λ x → case-or (normal-or-hasredex (app fun arg'))
@@ -206,7 +206,7 @@ shift-succ-aux2 (succ a) (lam bod) m = cong lam (shift-succ-aux2 (succ a) bod (s
 shift-succ-aux2 (succ a) (app fun arg) m =
   let term1 = shift (shift-fn-many m succ) (shift (shift-fn-many m (succ a +_)) arg)
       term2 = shift (shift-fn-many m (succ (succ a) +_)) fun
-  in trans (cong (λ x → app x term1) (shift-succ-aux2 (succ a) fun m)) (cong (λ x → app term2 x) (shift-succ-aux2 (succ a) arg m))
+  in trans (cong (λ x → app x term1) (shift-succ-aux2 (succ a) fun m)) (cong (app term2) (shift-succ-aux2 (succ a) arg m))
 
 shift-succ : ∀ a term → shift succ (shift (a +_) term) == shift (succ a +_) term
 shift-succ a term = shift-succ-aux2 a term 0
@@ -226,15 +226,15 @@ shift-add (succ a) b term =
 
 at-lemma1 : ∀ m idx arg → m == idx → at m arg idx == shift (m +_) arg
 at-lemma1 0 0 arg eq = sym (shift-0 arg)
-at-lemma1 (succ m) (succ idx) arg eq = trans (cong (λ x → shift succ x) (at-lemma1 m idx arg (succ-inj eq))) (shift-succ m arg)
+at-lemma1 (succ m) (succ idx) arg eq = trans (cong (shift succ) (at-lemma1 m idx arg (succ-inj eq))) (shift-succ m arg)
 
 at-lemma2 : ∀ m idx arg → m < (succ idx) → at m arg (succ idx) == var idx
 at-lemma2 0 idx arg _ = refl
-at-lemma2 (succ m) (succ idx) arg (<succ idx<m) = cong (λ x → shift succ x) (at-lemma2 m idx arg idx<m)
+at-lemma2 (succ m) (succ idx) arg (<succ idx<m) = cong (shift succ) (at-lemma2 m idx arg idx<m)
 
 at-lemma3 : ∀ m idx arg → idx < m → at m arg idx == var idx
 at-lemma3 (succ m) 0 arg _ = refl
-at-lemma3 (succ m) (succ idx) arg (<succ idx<m) = cong (λ x → shift succ x) (at-lemma3 m idx arg idx<m)
+at-lemma3 (succ m) (succ idx) arg (<succ idx<m) = cong (shift succ) (at-lemma3 m idx arg idx<m)
 
 shift-fn-lemma1 : (n m p : Nat) → m <= n → shift-fn-many m (p +_) n == (p + n)
 shift-fn-lemma1 n 0 p _ = refl

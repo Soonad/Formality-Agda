@@ -66,3 +66,15 @@ record Sum (A : Set) (B : A → Set) : Set where
   field
     proj1 : A
     proj2 : B proj1
+
+-- Function composition
+_∘_ : ∀ {a b c}
+        {A : Set a} {B : A → Set b} {C : {x : A} → B x → Set c} →
+        (∀ {x} (y : B x) → C y) → (g : (x : A) → B x) →
+        ((x : A) → C (g x))
+f ∘ g = λ x → f (g x)
+
+-- Application
+_$_ : ∀ {a b} {A : Set a} {B : A → Set b} →
+      ((x : A) → B x) → ((x : A) → B x)
+f $ x = f x

@@ -63,8 +63,8 @@ succ-not-0 ()
 ==dec : (a b : Nat) -> Or (a == b) (Not (a == b))
 ==dec 0 0 = or0 refl
 ==dec (succ a) 0 = or1 succ-not-0
-==dec 0 (succ b) = or1 (λ eq -> succ-not-0 (sym eq))
-==dec (succ a) (succ b) = case-or (==dec a b) (λ x -> or0 (cong succ x)) (λ x -> or1 (succ-inj' x))
+==dec 0 (succ b) = or1 (succ-not-0 ∘ sym)
+==dec (succ a) (succ b) = case-or (==dec a b) (or0 ∘ (cong succ)) (or1 ∘ succ-inj')
 
 -- Nat comparison
 same : Nat -> Nat -> Bool
@@ -328,7 +328,7 @@ data _<=_ : (a b : Nat) → Set where
 <=-total : (a b : Nat) -> Or (a <= b) (succ b <= a)
 <=-total 0 b = or0 <=zero
 <=-total (succ a) 0 = or1 (<=succ <=zero)
-<=-total (succ a) (succ b) = case-or (<=-total a b) (λ x -> or0 (<=succ x)) (λ x -> or1 (<=succ x))
+<=-total (succ a) (succ b) = case-or (<=-total a b) (or0 ∘ <=succ) (or1 ∘ <=succ)
 
 <=-trichotomy : (a b : Nat) -> Or (a == b) (Or (succ a <= b) (succ b <= a))
 <=-trichotomy 0 0 = or0 refl
@@ -350,7 +350,7 @@ succ-strict (<=succ pf) = pf
 <=-dec : (a b : Nat) -> Or (a <= b) (Not (a <= b))
 <=-dec zero b = or0 <=zero
 <=-dec (succ a) zero = or1 succ-not-<=-0
-<=-dec (succ a) (succ b) = case-or (<=-dec a b) (λ x -> or0 (<=succ x)) (λ x -> or1 (λ pf -> x (succ-strict pf)))
+<=-dec (succ a) (succ b) = case-or (<=-dec a b) (or0 ∘ <=succ) (or1 ∘ (_∘ succ-strict))
 
 <=-bottom : {a : Nat} -> a <= 0 -> a == 0
 <=-bottom {0} <=zero = refl
@@ -418,7 +418,7 @@ not-n-<-0 ()
 <=-is-<-or-== : {a b : Nat} -> a <= b -> Or (a < b) (a == b)
 <=-is-<-or-== {zero}   {zero}   _           = or1 refl
 <=-is-<-or-== {zero}   {succ b} _           = or0 <zero
-<=-is-<-or-== {succ a} {succ b} (<=succ pf) = case-or (<=-is-<-or-== pf) (λ x -> or0 (<succ x)) (λ x -> or1 (cong succ x))
+<=-is-<-or-== {succ a} {succ b} (<=succ pf) = case-or (<=-is-<-or-== pf) (or0 ∘ <succ) (or1 ∘ (cong succ))
 
 <-stronger-<= : {a b : Nat} -> a < b -> a <= b
 <-stronger-<= {0} {(succ b)} <zero = <=zero
@@ -449,7 +449,7 @@ nat-trichotomy (succ a) (succ b) =
 not->=-to-< : {a b : Nat} -> Not(b <= a) -> a < b
 not->=-to-< {a} {zero} neg = absurd (neg <=zero)
 not->=-to-< {zero} {succ b} _ = <zero
-not->=-to-< {succ a} {succ b} neg = <succ (not->=-to-< (λ (pf : b <= a) -> neg (<=succ pf)))
+not->=-to-< {succ a} {succ b} neg = <succ (not->=-to-< (neg ∘ <=succ))
 
 <-comb-<= : {a b c : Nat} -> a < b -> b <= c -> a < c
 <-comb-<= {a} {b} {c} a<b b<=c = let
@@ -476,7 +476,7 @@ not->=-to-< {succ a} {succ b} neg = <succ (not->=-to-< (λ (pf : b <= a) -> neg 
       succ (a + (x + y))
     ==[ cong succ (add-assoc a x y) ]
       succ ((a + x) + y)
-    ==[ cong (λ x -> succ (x + y)) a+x==b ]
+    ==[ cong (succ ∘ (_+ y)) a+x==b ]
       succ (b + y)
     ==[ 1+b+y==c ]
       c
