@@ -33,26 +33,19 @@ data _∈_ {A : Set} (x : A) : List A → Set where
   zero : ∀ {xs} → x ∈ x :: xs
   succ : ∀ {y xs} → x ∈ xs → x ∈ y :: xs
 
-data TermT (Γ : Context) : Type → Set where
-  var : ∀ {A} (x : A ∈ Γ) → TermT Γ A
-  app : ∀ {A B} → TermT Γ (A => B) → TermT Γ A → TermT Γ B
-  lam : ∀ {A B} → TermT (A :: Γ) B → TermT Γ (A => B)
-  box : ∀ {A} → TermT Γ A -> TermT Γ (! A)
-  dup : ∀ {A B} → TermT Γ (! A) -> TermT (A :: (A :: Γ)) B -> TermT Γ B
-
 rawIndex : ∀ {A} {x : A} {xs} → x ∈ xs → Nat
 rawIndex zero    = zero
 rawIndex (succ i) = succ (rawIndex i)
 
-eraseTypes : ∀ {Γ A} → TermT Γ A → Term
-eraseTypes (var x)   = var $ rawIndex x
-eraseTypes (lam t)   = lam $ eraseTypes t
-eraseTypes (app s t) = app (eraseTypes s) (eraseTypes t)
-eraseTypes (box s)   = box (eraseTypes s)
-eraseTypes (dup s t) = app (eraseTypes s) (eraseTypes t)
+data ofType (Γ : Context) : Term → Type → Set where
+  var : ∀ {A} (x : A ∈ Γ) → ofType Γ (var (rawIndex x)) A
+  app : ∀ {A B fun arg} → ofType Γ fun (A => B) → ofType Γ arg A → ofType Γ (app fun arg) B
+  lam : ∀ {A B bod} → ofType (A :: Γ) bod B → ofType Γ (lam bod) (A => B)
+  box : ∀ {A bod} → ofType Γ bod A -> ofType Γ (box bod) (! A)
+  dup : ∀ {A B arg bod} → ofType Γ arg (! A) -> ofType (A :: (A :: Γ)) bod B -> ofType Γ (dup arg bod) B
 
-data WellTyped Γ e : Set where
-  ok : (A : Type) (t : TermT Γ A) → eraseTypes t == e → WellTyped Γ e
+WellTyped : Context → Term → Set
+WellTyped Γ t = Sum Type (ofType Γ t)
 
 -- Closed terms that are well-typed
 WellTyped* : Term → Set
@@ -81,8 +74,8 @@ subst-fn fn (succ i) = shift succ (fn i)
 
 -- Creates a substitution map that replaces only one variable
 at : Nat → Term → Nat → Term
-at zero     term zero     = term
-at zero     term (succ i) = var i
+at 0        term 0     = term
+at 0        term (succ i) = var i
 at (succ n) term = subst-fn (at n term)
 
 -- Substitutes all free vars on term with a substitution map, `fn`
@@ -92,6 +85,39 @@ subst fn (lam bod)     = lam $ subst (subst-fn fn) bod
 subst fn (box bod)     = box $ subst fn bod
 subst fn (app fun arg) = app (subst fn fun) (subst fn arg)
 subst fn (dup arg bod) = dup (subst fn arg) (subst (subst-fn (subst-fn fn)) bod)
+
+shift-type-var : ∀ {A Γ i B} → ofType Γ (var i) B → ofType (A :: Γ) (var (succ i)) B
+shift-type-var (var pf) = var (succ pf)
+
+shift-type-lemma-aux : ∀ Δ {A Γ t B} → ofType (Δ ++ Γ) t B → ofType (Δ ++ A :: Γ) (shift (shift-fn-many (length Δ) succ) t) B
+shift-type-lemma-aux Δ {A} {Γ} {var _} {B} (var pf)        with Δ
+shift-type-lemma-aux Δ {A} {Γ} {var _} {B} (var pf)        | []      = var (succ pf)
+shift-type-lemma-aux Δ {A} {Γ} {var _} {B} (var zero)      | C :: Δ' = var zero
+shift-type-lemma-aux Δ {A} {Γ} {var _} {B} (var (succ pf)) | C :: Δ' = shift-type-var $ shift-type-lemma-aux Δ' (var pf)
+shift-type-lemma-aux Δ {A} {Γ} {lam t} {C => B} (lam pf) = lam $ shift-type-lemma-aux (C :: Δ) pf
+shift-type-lemma-aux Δ {A} {Γ} {box t} { ! B } (box pf) = box $ shift-type-lemma-aux Δ pf
+shift-type-lemma-aux Δ {A} {Γ} {app t s} {B} (app pf_t pf_s) = app (shift-type-lemma-aux Δ pf_t) (shift-type-lemma-aux Δ pf_s)
+shift-type-lemma-aux Δ {A} {Γ} {dup t s} {B} (dup {C} pf_t pf_s) = dup (shift-type-lemma-aux Δ pf_t) (shift-type-lemma-aux (C :: C :: Δ) pf_s)
+
+shift-type-lemma : ∀ {A Γ t B} → ofType Γ t B → ofType (A :: Γ) (shift succ t) B
+shift-type-lemma pf = shift-type-lemma-aux [] pf
+
+-- Cut elimination
+cut_aux : (Δ Γ : Context) (A B : Type) (bod arg : Term) -> ofType (Δ ++ A :: Γ) bod B -> ofType Γ arg A -> ofType (Δ ++ Γ) (subst (at (length Δ) arg) bod) B
+cut_aux Δ Γ A B (var _) arg (var pf1) pf2                with rawIndex pf1 | inspect rawIndex pf1
+cut_aux [] Γ A A (var _) arg (var zero) pf2              | 0               | its _ = pf2
+cut_aux (B :: Δ) Γ A B (var _) arg (var zero) pf2        | 0               | its _ = var zero
+cut_aux [] (C :: Γ) A B (var _) arg (var (succ pf1)) pf2 | succ n          | its eq = rwt (λ x → ofType (C :: Γ) (var x) B) (succ-inj eq) (var pf1)
+cut_aux (C :: Δ) Γ  A B (var _) arg (var (succ pf1)) pf2  | succ n          | its eq =
+  let oftype = rwt (λ x → ofType (Δ ++ Γ) (at (length Δ) arg x) B) (succ-inj eq) $ cut_aux Δ Γ A B (var _)  arg (var pf1) pf2
+  in shift-type-lemma oftype
+cut_aux Δ Γ A (C => B) (lam t) arg (lam pf1) pf2      = lam $ cut_aux (C :: Δ) Γ A B t arg pf1 pf2
+cut_aux Δ Γ A (! B) (box t) arg (box pf1) pf2         = box $ cut_aux Δ Γ A B t arg pf1 pf2
+cut_aux Δ Γ A B (app t s) arg (app {C} pf_t pf_s) pf2 = app (cut_aux Δ Γ A (C => B) t arg pf_t pf2) (cut_aux Δ Γ A C s arg pf_s pf2)
+cut_aux Δ Γ A B (dup t s) arg (dup {C} pf_t pf_s) pf2 = dup (cut_aux Δ Γ A (! C) t arg pf_t pf2) (cut_aux (C :: C :: Δ) Γ A B s arg pf_s pf2)
+
+cut : (Γ : Context) (A B : Type) (bod arg : Term) -> ofType (A :: Γ) bod B -> ofType Γ arg A -> ofType Γ (subst (at 0 arg) bod) B
+cut = cut_aux []
 
 -- Computes how many times a free variable is used
 uses : Term -> Nat -> Nat
@@ -239,18 +265,3 @@ noredex-is-normal (dup (box bod) arg) noredex correct       = absurd $ noredex f
 noredex-is-normal (app (lam bod) arg) noredex correct       = absurd $ noredex found-app-redex
 noredex-is-normal (dup (lam bod) arg) noredex correct       = absurd $ correct dup-lam-incorrect
 noredex-is-normal (app (box bod) arg) noredex correct       = absurd $ correct app-box-incorrect
-
--- A term is either normal or has a redex
-normal-or-hasredex : (t : Term) → Or (IsNormal t) (HasRedex t)
-normal-or-hasredex (var idx) = or0 var-normal
-normal-or-hasredex (lam bod) = case-or (normal-or-hasredex bod) (λ x → or0 (lam-normal x)) (λ x → or1 (lam-redex x))
-normal-or-hasredex (app (lam bod) arg) = or1 found-app-redex
-normal-or-hasredex (app (var idx) arg) = case-or (normal-or-hasredex arg) (λ x → or0 (app-var-normal x)) (λ x → or1 (app-redex (or1 x)))
-normal-or-hasredex (app (app fun arg') arg) =
-  case-or (normal-or-hasredex arg)
-          (λ x → case-or (normal-or-hasredex (app fun arg'))
-                 (λ y → or0 (app-app-normal y x))
-                 (λ y → or1 (app-redex (or0 y))))
-          (λ x → or1 (app-redex (or1 x)))
-normal-or-hasredex x = {!!}
-

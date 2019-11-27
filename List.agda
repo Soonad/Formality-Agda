@@ -10,8 +10,6 @@ data List (A : Set) : Set where
   _::_ : A -> List A -> List A
 
 {-# BUILTIN LIST List #-}
-{-# BUILTIN NIL  []   #-}
-{-# BUILTIN CONS _::_ #-}
 
 length : {A : Set} -> List A -> Nat
 length []        = 0
