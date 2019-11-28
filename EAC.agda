@@ -129,6 +129,35 @@ uses (app fun arg) idx = uses fun idx + uses arg idx
 uses (box bod)     idx = uses bod idx
 uses (dup arg bod) idx = uses arg idx + uses bod (2 + idx)
 
+uses-n-step : {i n : Nat} -> (p : Nat) -> uses (var (p + i)) (p + n) == uses (var i) n
+uses-n-step 0 = refl
+uses-n-step (succ p) = uses-n-step p
+
+-- Computes the size of a term
+size : Term -> Nat
+size (var i)   = 0
+size (lam t)   = succ (size t)
+size (box t)   = succ (size t)
+size (app t s) = succ (size t + size s)
+size (dup t s) = succ (size t + size s)
+
+-- Computes the number of redexes in a term
+redexes : (t : Term) → Nat
+redexes (var i)           = 0
+redexes (lam t)           = redexes t
+redexes (box t)           = redexes t
+redexes (app (var i)   s) = redexes s
+redexes (app (lam t)   s) = 1 + (redexes t + redexes s)
+redexes (app (app t s) r) = redexes (app t s) + redexes r
+redexes (app (dup t s) r) = 1 + (redexes (dup t s) + redexes r)
+redexes (dup (var i)   s) = redexes s
+redexes (dup (box t)   s) = 1 + (redexes t + redexes s)
+redexes (dup (app t s) r) = redexes (app t s) + redexes r
+redexes (dup (dup t s) r) = 1 + (redexes (dup t s) + redexes r)
+-- should not happen in a typed term
+redexes (dup (lam t)   s) = 0
+redexes (app (box t)   s) = 0
+
 -- Checks whether all occurences of a free variable are in a specific level
 at-level-aux : Nat -> Term -> Nat -> Nat -> Bool
 at-level-aux current-lvl (var idx')    idx lvl with same idx' idx
@@ -194,6 +223,14 @@ reduce Γ (dup (box t) s) B (dup {A} (box pf1) pf2) =
       type = cut Γ A B (subst (at 0 (shift succ t)) s) t type' pf1
   in sigma term type
 
+-- Reduce function in a composable form
+reduce' : (Γ : Context) (A : Type) -> Sum Term (λ t → ofType Γ t A) -> Sum Term (λ t → ofType Γ t A)
+reduce' Γ A (sigma t pf) = reduce Γ t A pf
+
+-- Reduce function but discarding its type
+reduce-raw : (Γ : Context) (t : Term) (A : Type) (pf : ofType Γ t A) -> Term
+reduce-raw Γ t A pf = Sum.proj1 (reduce Γ t A pf)
+
 -- Elementary affine term
 data EAC : (t : Term) → Set where
   var-eac : ∀ {a} → EAC (var a)
@@ -222,23 +259,6 @@ data HasRedex : (t : Term) → Set where
   found-dup-redex : ∀ {bod arg} → HasRedex (dup (box bod) arg)
   found-app-swap : ∀ {bod arg arg'} → HasRedex (app (dup arg arg') bod)
   found-dup-swap : ∀ {bod arg arg'} → HasRedex (dup (dup arg arg') bod)
-
--- Directed one step reduction relation, `a ~> b` means term `a` reduces to `b` in one step
-data _~>_ : Term → Term → Set where
-  ~beta : ∀ {t u} → app (lam t) u ~> subst (at 0 u) t
-  ~app0 : ∀ {a f0 f1} → f0 ~> f1 → app f0 a ~> app f1 a
-  ~app1 : ∀ {f a0 a1} → a0 ~> a1 → app f a0 ~> app f a1
-  ~lam0 : ∀ {b0 b1} → b0 ~> b1 → lam b0 ~> lam b1
-
--- Directed arbitraty step reduction relation, `a ~>> b` means term `a` reduces to `b` in zero or more steps
-data _~>>_ : Term → Term → Set where
-  ~>>refl  : ∀ {t t'} → t == t' → t ~>> t'
-  ~>>trans : ∀ {t t' t''} → t ~>> t'' → t'' ~>> t' → t ~>> t'
-  ~>>step  : ∀ {t t'} → t ~> t' → t ~>> t'
-
-data Normalizable : (t : Term) → Set where
-  normal-is-normalizable : ∀ {t} → IsNormal t → Normalizable t
-  onestep-normalizable : ∀ {t t'} → t ~> t' → Normalizable t' → Normalizable t
 
 -- A normal term has no redexes
 normal-has-noredex : (t : Term) → IsNormal t → Not (HasRedex t)
@@ -296,3 +316,60 @@ normal-or-hasredex Γ (dup (dup t s) r) _ (dup _ _) = or1 found-dup-swap
 -- redexes
 normal-or-hasredex Γ (app (lam t) s) _ (app _ _) = or1 found-app-redex
 normal-or-hasredex Γ (dup (box t) s) _ (dup _ _) = or1 found-dup-redex
+
+-- Directed one step reduction relation, `a ~> b` means term `a` reduces to `b` in one step
+data _~>_ : Term → Term → Set where
+  ~>lam   : ∀ {t t'}   → t ~> t' → lam t ~> lam t'
+  ~>box   : ∀ {t t'}   → t ~> t' → box t ~> box t'
+  ~>app0  : ∀ {t t' s} → t ~> t' → app t s ~> app t' s
+  ~>app1  : ∀ {t s s'} → s ~> s' → app t s ~> app t s'
+  ~>dup0  : ∀ {t t' s} → t ~> t' → dup t s ~> dup t' s
+  ~>dup1  : ∀ {t s s'} → s ~> s' → dup t s ~> dup t s'
+  ~>beta0 : ∀ {t s}    → app (lam t) s ~> subst (at 0 s) t
+  ~>beta1 : ∀ {t s}    → dup (box t) s ~> subst (at 0 t) (subst (at 0 (shift succ t)) s)
+  ~>swap0 : ∀ {t s r}  → app (dup t s) r ~> dup t (app s (shift succ (shift succ r)))
+  ~>swap1 : ∀ {t s r}  → dup (dup t s) r ~> dup t (dup s (shift (shift-fn-many 2 succ) (shift (shift-fn-many 2 succ) r)))
+
+-- Directed arbitraty step reduction relation, `a ~>> b` means term `a` reduces to `b` in zero or more steps
+data _~>>_ : Term → Term → Set where
+  ~>>refl  : ∀ {t t'} → t == t' → t ~>> t'
+  ~>>trans : ∀ {t t' t''} → t ~>> t'' → t'' ~>> t' → t ~>> t'
+  ~>>step  : ∀ {t t'} → t ~> t' → t ~>> t'
+
+data Normalizable : (t : Term) → Set where
+  normal : ∀ {t} → IsNormal t → Normalizable t
+  step   : ∀ {t t'} → t ~> t' → Normalizable t' → Normalizable t
+
+manystep-norm : ∀ {t t'} → t ~>> t' → Normalizable t' → Normalizable t
+manystep-norm (~>>refl refl) norm = norm
+manystep-norm (~>>step a)    norm = step a norm
+manystep-norm (~>>trans a b) norm = manystep-norm a (manystep-norm b norm)
+
+~>>cong : ∀ {t t'} → (f : Term → Term) → (∀ {t t'} → t ~> t' → f t ~> f t') → t ~>> t' → f t ~>> f t'
+~>>cong f pf (~>>refl eq)   = ~>>refl (cong f eq)
+~>>cong f pf (~>>trans a b) = ~>>trans (~>>cong f pf a) (~>>cong f pf b)
+~>>cong f pf (~>>step a)    = ~>>step (pf a)
+
+~>>pow : (f : Term → Term) → (∀ {x} → x ~>> f x) → ∀ {x} n → x ~>> pow f n x
+~>>pow f pf 0 = ~>>refl refl
+~>>pow f pf (succ n) = ~>>trans (~>>pow f pf n) pf
+
+--reduce : (Γ : Context) (t : Term) (A : Type) -> ofType Γ t A -> Sum Term (λ t → ofType Γ t A)
+reduce-~>> : {Γ : Context} {t : Term} {A : Type} {pf : ofType Γ t A} → t ~>> reduce-raw Γ t A pf
+reduce-~>> {Γ} {var i}           {A} {var pf} = ~>>refl refl
+reduce-~>> {Γ} {lam t}           {A} {lam pf} = ~>>cong lam ~>lam reduce-~>>
+reduce-~>> {Γ} {box t}           {A} {box pf} = ~>>cong box ~>box reduce-~>>
+reduce-~>> {Γ} {app (var i) s}   {A} {app (var pf1) pf2} = ~>>cong (app (var i)) ~>app1 reduce-~>>
+reduce-~>> {Γ} {app (lam t) s}   {A} {app {C} (lam pf1) pf2} = ~>>step ~>beta0
+reduce-~>> {Γ} {app (app t s) r} {A} {app {C} (app pf1 pf2) pf3} = let
+  part0 = ~>>cong (app (app t s)) ~>app1 reduce-~>>
+  part1 = ~>>cong (λ x → app x (reduce-raw Γ r C pf3)) ~>app0 (reduce-~>> {Γ} {app t s} {C => A} {app pf1 pf2})
+  in ~>>trans part0 part1
+reduce-~>> {Γ} {app (dup t s) r} {A} {app {C} (dup pf1 pf2) pf3} = ~>>step ~>swap0
+reduce-~>> {Γ} {dup (var i) s}   {A} {dup (var pf1) pf2} = ~>>cong (dup (var i)) ~>dup1 reduce-~>>
+reduce-~>> {Γ} {dup (box t) s}   {A} {dup {C} (box pf1) pf2} = ~>>step (~>beta1 {t} {s})
+reduce-~>> {Γ} {dup (app t s) r} {A} {dup {C} (app pf1 pf2) pf3} = let
+  part0 = ~>>cong (dup (app t s)) ~>dup1 reduce-~>>
+  part1 = ~>>cong (λ x → dup x (reduce-raw (C :: C :: Γ) r A pf3)) ~>dup0 (reduce-~>> {Γ} {app t s} { ! C } {app pf1 pf2})
+  in ~>>trans part0 part1
+reduce-~>> {Γ} {dup (dup t s) r} {A} {dup {C} (dup pf1 pf2) pf3} = ~>>step ~>swap1
