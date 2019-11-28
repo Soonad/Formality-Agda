@@ -94,21 +94,21 @@ shift-type-lemma-aux Δ {A} {Γ} {var _} {B} (var pf)        with Δ
 shift-type-lemma-aux Δ {A} {Γ} {var _} {B} (var pf)        | []      = var (succ pf)
 shift-type-lemma-aux Δ {A} {Γ} {var _} {B} (var zero)      | C :: Δ' = var zero
 shift-type-lemma-aux Δ {A} {Γ} {var _} {B} (var (succ pf)) | C :: Δ' = shift-type-var $ shift-type-lemma-aux Δ' (var pf)
-shift-type-lemma-aux Δ {A} {Γ} {lam t} {C => B} (lam pf) = lam $ shift-type-lemma-aux (C :: Δ) pf
-shift-type-lemma-aux Δ {A} {Γ} {box t} { ! B } (box pf) = box $ shift-type-lemma-aux Δ pf
-shift-type-lemma-aux Δ {A} {Γ} {app t s} {B} (app pf_t pf_s) = app (shift-type-lemma-aux Δ pf_t) (shift-type-lemma-aux Δ pf_s)
-shift-type-lemma-aux Δ {A} {Γ} {dup t s} {B} (dup {C} pf_t pf_s) = dup (shift-type-lemma-aux Δ pf_t) (shift-type-lemma-aux (C :: C :: Δ) pf_s)
+shift-type-lemma-aux Δ {A} {Γ} {lam t} {C => B} (lam pf)             = lam $ shift-type-lemma-aux (C :: Δ) pf
+shift-type-lemma-aux Δ {A} {Γ} {box t} { ! B } (box pf)              = box $ shift-type-lemma-aux Δ pf
+shift-type-lemma-aux Δ {A} {Γ} {app t s} {B} (app pf_t pf_s)         = app (shift-type-lemma-aux Δ pf_t) (shift-type-lemma-aux Δ pf_s)
+shift-type-lemma-aux Δ {A} {Γ} {dup t s} {B} (dup {C} pf_t pf_s)     = dup (shift-type-lemma-aux Δ pf_t) (shift-type-lemma-aux (C :: C :: Δ) pf_s)
 
 shift-type-lemma : ∀ {A Γ t B} → ofType Γ t B → ofType (A :: Γ) (shift succ t) B
 shift-type-lemma pf = shift-type-lemma-aux [] pf
 
--- Cut elimination
+-- Cut rule
 cut_aux : (Δ Γ : Context) (A B : Type) (bod arg : Term) -> ofType (Δ ++ A :: Γ) bod B -> ofType Γ arg A -> ofType (Δ ++ Γ) (subst (at (length Δ) arg) bod) B
 cut_aux Δ Γ A B (var _) arg (var pf1) pf2                with rawIndex pf1 | inspect rawIndex pf1
 cut_aux [] Γ A A (var _) arg (var zero) pf2              | 0               | its _ = pf2
 cut_aux (B :: Δ) Γ A B (var _) arg (var zero) pf2        | 0               | its _ = var zero
 cut_aux [] (C :: Γ) A B (var _) arg (var (succ pf1)) pf2 | succ n          | its eq = rwt (λ x → ofType (C :: Γ) (var x) B) (succ-inj eq) (var pf1)
-cut_aux (C :: Δ) Γ  A B (var _) arg (var (succ pf1)) pf2  | succ n          | its eq =
+cut_aux (C :: Δ) Γ  A B (var _) arg (var (succ pf1)) pf2 | succ n          | its eq =
   let oftype = rwt (λ x → ofType (Δ ++ Γ) (at (length Δ) arg x) B) (succ-inj eq) $ cut_aux Δ Γ A B (var _)  arg (var pf1) pf2
   in shift-type-lemma oftype
 cut_aux Δ Γ A (C => B) (lam t) arg (lam pf1) pf2      = lam $ cut_aux (C :: Δ) Γ A B t arg pf1 pf2
@@ -148,32 +148,59 @@ at-level-affine term idx lvl | 0 = true
 at-level-affine term idx lvl | 1 = at-level term idx lvl
 at-level-affine term idx lvl | succ (succ _) = false
 
+-- Performs a global reduction of all current redexes
+reduce : (Γ : Context) (t : Term) (A : Type) -> ofType Γ t A -> Sum Term (λ t → ofType Γ t A)
+-- traverses
+reduce Γ (var i) A (var pf) = sigma (var i) (var pf)
+reduce Γ (lam t) (A => B) (lam pf) =
+  let sigma t' pf' = reduce (A :: Γ) t B pf
+  in sigma (lam t') (lam pf')
+reduce Γ (box t) (! A) (box pf) =
+  let sigma t' pf' = reduce Γ t A pf
+  in sigma (box t') (box pf') 
+reduce Γ (app (var i) t) A (app {C} pf1 pf2) = 
+  let sigma x pf1' = reduce Γ (var i) (C => A) pf1
+      sigma t' pf2' = reduce Γ t C pf2
+  in sigma (app x t') (app pf1' pf2')
+reduce Γ (app (app t s) r) A (app {C} pf1 pf2) =
+  let sigma x pf1' = reduce Γ (app t s) (C => A) pf1
+      sigma r' pf2' = reduce Γ r C pf2
+  in sigma (app x r') (app pf1' pf2')
+reduce Γ (dup (var i) t) A (dup {C} pf1 pf2) =
+  let sigma x pf1' = reduce Γ (var i) (! C) pf1
+      sigma t' pf2' = reduce (C :: C :: Γ) t A pf2
+  in sigma (dup x t') (dup pf1' pf2')
+reduce Γ (dup (app t s) r) A (dup {C} pf1 pf2) =
+  let sigma x pf1' = reduce Γ (app t s) (! C) pf1
+      sigma r' pf2' = reduce (C :: C :: Γ) r A pf2
+  in sigma (dup x r') (dup pf1' pf2')
+-- swaps
+reduce Γ (app (dup t s) r) A (app {C} (dup {D} pf1 pf2) pf3) =
+  let term = dup t (app s (shift succ (shift succ r)))
+      type = dup pf1 (app pf2 (shift-type-lemma (shift-type-lemma pf3)))
+  in sigma term type
+reduce Γ (dup (dup t s) r) A (dup {C} (dup {D} pf1 pf2) pf3) =
+  let term =  dup t (dup s (shift (shift-fn-many 2 succ) (shift (shift-fn-many 2 succ) r)))
+      type = dup pf1 (dup pf2 (shift-type-lemma-aux (C :: C :: []) {D} (shift-type-lemma-aux (C :: C :: []) {D} pf3)))
+  in sigma term type
+-- redexes
+reduce Γ (app (lam t) s) B (app {A} (lam pf1) pf2) =
+  let term = subst (at zero s) t
+      type = cut Γ A B t s pf1 pf2
+  in sigma term type
+reduce Γ (dup (box t) s) B (dup {A} (box pf1) pf2) =
+  let term = subst (at zero t) (subst (at zero (shift succ t)) s)
+      type' = cut (A :: Γ) A B s (shift succ t) pf2 (shift-type-lemma pf1)
+      type = cut Γ A B (subst (at 0 (shift succ t)) s) t type' pf1
+  in sigma term type
+
+-- Elementary affine term
 data EAC : (t : Term) → Set where
   var-eac : ∀ {a} → EAC (var a)
   lam-eac : ∀ {bod} → at-level-affine bod 0 0 == true → EAC bod -> EAC (lam bod)
   app-eac : ∀ {fun arg} → EAC fun → EAC arg -> EAC (app fun arg)
   box-eac : ∀ {bod} → EAC bod → EAC (box bod)
   dup-eac : ∀ {arg bod} → at-level-affine bod 0 1 == true → at-level-affine bod 1 1 == true → EAC arg → EAC bod → EAC (dup arg bod)
-
--- Performs a global reduction of all current redexes
-reduce : Term -> Maybe Term
--- traverses
-reduce (var i)                   = (| (var i) |)
-reduce (lam bod)                 = (| lam (reduce bod) |)
-reduce (box bod)                 = (| box (reduce bod) |)
-reduce (app (var idx) arg)       = (| (app (var idx)) (reduce arg) |)
-reduce (app (app ffun farg) arg) = (| app (reduce (app ffun farg)) (reduce arg) |)
-reduce (dup (var idx) bod)       = (| (dup (var idx)) (reduce bod) |)
-reduce (dup (app fun arg) bod)   = (| dup (reduce (app fun arg)) (reduce bod) |)
--- swaps
-reduce (app (dup arg arg') bod)  = (| (dup arg (app arg' (shift (2 +_) bod))) |)
-reduce (dup (dup arg arg') bod)  = (| (dup arg (dup arg' (shift (2 +_) bod))) |)
--- redexes
-reduce (app (lam bod) arg)       = (| (subst (at zero arg) bod) |)
-reduce (dup (box arg) bod)       = (| (subst (at zero arg) (subst (at zero arg) bod)) |)
--- should not happen
-reduce (app (box bod) arg)       = none
-reduce (dup (lam bod') bod)      = none
 
 -- This term is on normal form
 data IsNormal : (t : Term) → Set where
@@ -195,15 +222,6 @@ data HasRedex : (t : Term) → Set where
   found-dup-redex : ∀ {bod arg} → HasRedex (dup (box bod) arg)
   found-app-swap : ∀ {bod arg arg'} → HasRedex (app (dup arg arg') bod)
   found-dup-swap : ∀ {bod arg arg'} → HasRedex (dup (dup arg arg') bod)
-
--- Incorrect term
-data Incorrect : (t : Term) → Set where
-  lam-incorrect : ∀ {bod} → Incorrect bod -> Incorrect (lam bod)
-  box-incorrect : ∀ {bod} → Incorrect bod -> Incorrect (box bod)
-  app-incorrect : ∀ {fun arg} → Or (Incorrect fun) (Incorrect arg) -> Incorrect (app fun arg)
-  dup-incorrect : ∀ {arg bod} → Or (Incorrect arg) (Incorrect bod) -> Incorrect (dup arg bod)
-  app-box-incorrect : ∀ {fun arg} → Incorrect (app (box fun) arg)
-  dup-lam-incorrect : ∀ {arg bod} → Incorrect (dup (lam arg) bod)
 
 -- Directed one step reduction relation, `a ~> b` means term `a` reduces to `b` in one step
 data _~>_ : Term → Term → Set where
@@ -232,36 +250,3 @@ normal-has-noredex (app (app ffun farg) arg) (app-app-normal _ x) (app-redex (or
 normal-has-noredex (dup (var idx) bod) (dup-var-normal x) (dup-redex (or1 y))         = normal-has-noredex bod x y
 normal-has-noredex (dup (app ffun farg) bod) (dup-app-normal x _) (dup-redex (or0 y)) = normal-has-noredex (app ffun farg) x y
 normal-has-noredex (dup (app ffun farg) bod) (dup-app-normal _ x) (dup-redex (or1 y)) = normal-has-noredex bod x y
-
--- A normal term is correct
-normal-correct : (t : Term) → IsNormal t → Not (Incorrect t)
-normal-correct (lam bod) (lam-normal x) (lam-incorrect y)                             = normal-correct bod x y
-normal-correct (box bod) (box-normal x) (box-incorrect y)                             = normal-correct bod x y
-normal-correct (app (var idx) arg) (app-var-normal x) (app-incorrect (or1 y))         = normal-correct arg x y
-normal-correct (app (app ffun farg) arg) (app-app-normal x _) (app-incorrect (or0 y)) = normal-correct (app ffun farg) x y
-normal-correct (app (app ffun farg) arg) (app-app-normal _ x) (app-incorrect (or1 y)) = normal-correct arg x y
-normal-correct (dup (var idx) bod) (dup-var-normal x) (dup-incorrect (or1 y))         = normal-correct bod x y
-normal-correct (dup (app ffun farg) bod) (dup-app-normal x _) (dup-incorrect (or0 y)) = normal-correct (app ffun farg) x y
-normal-correct (dup (app ffun farg) bod) (dup-app-normal _ x) (dup-incorrect (or1 y)) = normal-correct bod x y
-
--- A term that has no redexes and is correct is normal
-noredex-is-normal : (t : Term) → Not (HasRedex t) → Not (Incorrect t) → IsNormal t
-noredex-is-normal (var idx) noredex correct                 = var-normal
-noredex-is-normal (lam bod) noredex correct                 = lam-normal (noredex-is-normal bod (noredex ∘ lam-redex) (correct ∘ lam-incorrect))
-noredex-is-normal (box bod) noredex correct                 = box-normal (noredex-is-normal bod (noredex ∘ box-redex) (correct ∘ box-incorrect))
-noredex-is-normal (app (var idx) arg) noredex correct       = app-var-normal (noredex-is-normal arg (noredex ∘ (app-redex ∘ or1)) (correct ∘ (app-incorrect ∘ or1)))
-noredex-is-normal (app (app fun arg') arg) noredex correct =
-  app-app-normal
-  (noredex-is-normal (app fun arg') (noredex ∘ (app-redex ∘ or0)) (correct ∘ (app-incorrect ∘ or0)))
-  (noredex-is-normal arg (noredex ∘ (app-redex ∘ or1)) (correct ∘ (app-incorrect ∘ or1)))
-noredex-is-normal (dup (var idx) arg) noredex correct       = dup-var-normal (noredex-is-normal arg (noredex ∘ (dup-redex ∘ or1)) (correct ∘ (dup-incorrect ∘ or1)))
-noredex-is-normal (dup (app fun arg') arg) noredex correct  =
-  dup-app-normal
-  (noredex-is-normal (app fun arg') (noredex ∘ (dup-redex ∘ or0)) (correct ∘ (dup-incorrect ∘ or0)))
-  (noredex-is-normal arg (noredex ∘ (dup-redex ∘ or1)) (correct ∘ (dup-incorrect ∘ or1)))
-noredex-is-normal (app (dup bod arg') arg) noredex correct  = absurd $ noredex found-app-swap
-noredex-is-normal (dup (dup arg' bod) arg) noredex correct  = absurd $ noredex found-dup-swap
-noredex-is-normal (dup (box bod) arg) noredex correct       = absurd $ noredex found-dup-redex
-noredex-is-normal (app (lam bod) arg) noredex correct       = absurd $ noredex found-app-redex
-noredex-is-normal (dup (lam bod) arg) noredex correct       = absurd $ correct dup-lam-incorrect
-noredex-is-normal (app (box bod) arg) noredex correct       = absurd $ correct app-box-incorrect
