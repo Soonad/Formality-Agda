@@ -242,11 +242,57 @@ data Normalizable : (t : Term) → Set where
 
 -- A normal term has no redexes
 normal-has-noredex : (t : Term) → IsNormal t → Not (HasRedex t)
-normal-has-noredex (lam bod) (lam-normal x) (lam-redex y)                             = normal-has-noredex bod x y
-normal-has-noredex (box bod) (box-normal x) (box-redex y)                             = normal-has-noredex bod x y
-normal-has-noredex (app (var idx) arg) (app-var-normal x) (app-redex (or1 y))         = normal-has-noredex arg x y
-normal-has-noredex (app (app ffun farg) arg) (app-app-normal x _) (app-redex (or0 y)) = normal-has-noredex (app ffun farg) x y
-normal-has-noredex (app (app ffun farg) arg) (app-app-normal _ x) (app-redex (or1 y)) = normal-has-noredex arg x y
-normal-has-noredex (dup (var idx) bod) (dup-var-normal x) (dup-redex (or1 y))         = normal-has-noredex bod x y
-normal-has-noredex (dup (app ffun farg) bod) (dup-app-normal x _) (dup-redex (or0 y)) = normal-has-noredex (app ffun farg) x y
-normal-has-noredex (dup (app ffun farg) bod) (dup-app-normal _ x) (dup-redex (or1 y)) = normal-has-noredex bod x y
+normal-has-noredex (lam t) (lam-normal x) (lam-redex y)                       = normal-has-noredex t x y
+normal-has-noredex (box t) (box-normal x) (box-redex y)                       = normal-has-noredex t x y
+normal-has-noredex (app (var i) t) (app-var-normal x) (app-redex (or1 y))     = normal-has-noredex t x y
+normal-has-noredex (app (app t s) r) (app-app-normal x _) (app-redex (or0 y)) = normal-has-noredex (app t s) x y
+normal-has-noredex (app (app t s) r) (app-app-normal _ x) (app-redex (or1 y)) = normal-has-noredex r x y
+normal-has-noredex (dup (var i) t) (dup-var-normal x) (dup-redex (or1 y))     = normal-has-noredex t x y
+normal-has-noredex (dup (app t s) r) (dup-app-normal x _) (dup-redex (or0 y)) = normal-has-noredex (app t s) x y
+normal-has-noredex (dup (app t s) r) (dup-app-normal _ x) (dup-redex (or1 y)) = normal-has-noredex r x y
+
+-- A typed term that has no redexes is normal
+noredex-is-normal : (Γ : Context) (t : Term) (A : Type) (pf : ofType Γ t A) → Not (HasRedex t) → IsNormal t
+noredex-is-normal Γ (var i) A (var _) noredex                     = var-normal
+noredex-is-normal Γ (lam t) (A => B) (lam pf) noredex             = lam-normal (noredex-is-normal (A :: Γ) t B pf (noredex ∘ lam-redex))
+noredex-is-normal Γ (box t) (! A) (box pf) noredex                = box-normal (noredex-is-normal Γ t A pf (noredex ∘ box-redex))
+noredex-is-normal Γ (app (var i) t) A (app {C} _ pf) noredex      = app-var-normal (noredex-is-normal Γ t C pf (noredex ∘ (app-redex ∘ or1)))
+noredex-is-normal Γ (app (app t s) r) A (app {C} pf1 pf2) noredex =
+  app-app-normal
+  (noredex-is-normal Γ (app t s) (C => A) pf1 (noredex ∘ (app-redex ∘ or0)))
+  (noredex-is-normal Γ r C pf2 (noredex ∘ (app-redex ∘ or1)))
+noredex-is-normal Γ (dup (var i) t) A (dup {C} _ pf) noredex      = dup-var-normal (noredex-is-normal (C :: C :: Γ) t A pf (noredex ∘ (dup-redex ∘ or1)))
+noredex-is-normal Γ (dup (app t s) r) A (dup {C} pf1 pf2) noredex =
+  dup-app-normal
+  (noredex-is-normal Γ (app t s) (! C) pf1 (noredex ∘ (dup-redex ∘ or0)))
+  (noredex-is-normal (C :: C :: Γ) r A pf2 (noredex ∘ (dup-redex ∘ or1)))
+noredex-is-normal Γ (app (dup _ _) _) A (app _ _) noredex = absurd $ noredex found-app-swap
+noredex-is-normal Γ (dup (dup _ _) _) A (dup _ _) noredex = absurd $ noredex found-dup-swap
+noredex-is-normal Γ (app (lam _) _)   A (app _ _) noredex = absurd $ noredex found-app-redex
+noredex-is-normal Γ (dup (box _) _)   A (dup _ _) noredex = absurd $ noredex found-dup-redex
+
+-- A typed term is either normal or has a redex
+normal-or-hasredex : (Γ : Context) (t : Term) (A : Type) (pf : ofType Γ t A) → Or (IsNormal t) (HasRedex t)
+normal-or-hasredex Γ (var i) A (var _) = or0 var-normal
+normal-or-hasredex Γ (lam t) (A => B) (lam pf) = case-or (normal-or-hasredex (A :: Γ) t B pf) (or0 ∘ lam-normal) (or1 ∘ lam-redex) 
+normal-or-hasredex Γ (box t) (! A) (box pf) = case-or (normal-or-hasredex Γ t A pf) (or0 ∘ box-normal) (or1 ∘ box-redex) 
+normal-or-hasredex Γ (app (var i) t) B (app {A} _ pf) = case-or (normal-or-hasredex Γ t A pf) (or0 ∘ app-var-normal) (or1 ∘ (app-redex ∘ or1))
+normal-or-hasredex Γ (app (app t s) r) B (app {A} pf1 pf2) =
+  case-or (normal-or-hasredex Γ r A pf2)
+          (λ x → case-or (normal-or-hasredex Γ (app t s) (A => B) pf1)
+                 (λ y → or0 (app-app-normal y x))
+                 (λ y → or1 (app-redex (or0 y))))
+          (λ x → or1 (app-redex (or1 x)))
+normal-or-hasredex Γ (dup (var i) t) B (dup {A} _ pf) = case-or (normal-or-hasredex (A :: A :: Γ) t B pf) (or0 ∘ dup-var-normal) (or1 ∘ (dup-redex ∘ or1))
+normal-or-hasredex Γ (dup (app t s) r) B (dup {A} pf1 pf2) =
+  case-or (normal-or-hasredex (A :: A :: Γ) r B pf2)
+          (λ x → case-or (normal-or-hasredex Γ (app t s) (! A) pf1)
+                 (λ y → or0 (dup-app-normal y x))
+                 (λ y → or1 (dup-redex (or0 y))))
+          (λ x → or1 (dup-redex (or1 x)))
+-- swaps
+normal-or-hasredex Γ (app (dup t s) r) _ (app _ _) = or1 found-app-swap
+normal-or-hasredex Γ (dup (dup t s) r) _ (dup _ _) = or1 found-dup-swap
+-- redexes
+normal-or-hasredex Γ (app (lam t) s) _ (app _ _) = or1 found-app-redex
+normal-or-hasredex Γ (dup (box t) s) _ (dup _ _) = or1 found-dup-redex
