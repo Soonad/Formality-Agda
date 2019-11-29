@@ -51,72 +51,62 @@ WellTyped Γ t = Sum Type (ofType Γ t)
 WellTyped* : Term → Set
 WellTyped* e = WellTyped [] e
 
--- Adjusts a renaming function
-shift-fn : (Nat -> Nat) -> Nat -> Nat
-shift-fn fn zero     = zero
-shift-fn fn (succ i) = succ (fn i)
+-- Renames all free variables by incrementing a value
+shift-aux : (idx inc dpt : Nat) -> Nat
+shift-aux idx        inc 0          = inc + idx
+shift-aux 0          inc (succ dpt) = 0
+shift-aux (succ idx) inc (succ dpt) = succ (shift-aux idx inc dpt)
 
-shift-fn-many : Nat -> (Nat -> Nat) -> Nat -> Nat
-shift-fn-many n fn = pow shift-fn n fn
+shift : (t : Term) (inc dpt : Nat) -> Term
+shift (var i)   inc dpt = var (shift-aux i inc dpt)
+shift (lam t)   inc dpt = lam $ shift t inc (1 + dpt)
+shift (box t)   inc dpt = box $ shift t inc dpt
+shift (app t s) inc dpt = app (shift t inc dpt) (shift s inc dpt)
+shift (dup t s) inc dpt = dup (shift t inc dpt) (shift s inc (2 + dpt))
 
--- Renames all free variables with a renaming function, `fn`
-shift : (Nat -> Nat) -> Term -> Term
-shift fn (var i)       = var $ fn i
-shift fn (lam bod)     = lam $ shift (shift-fn fn) bod
-shift fn (box bod)     = box $ shift fn bod
-shift fn (app fun arg) = app (shift fn fun) (shift fn arg)
-shift fn (dup arg bod) = dup (shift fn arg) (shift (shift-fn (shift-fn fn)) bod)
+-- Substitutes a free variable on a term with another term
+subst : (bod arg : Term) (idx : Nat) → Term
+subst (var 0)        arg 0          = arg
+subst (var (succ i)) arg 0          = var i
+subst (var 0)        arg (succ idx) = var 0
+subst (var (succ i)) arg (succ idx) = shift (subst (var i) arg idx) 1 0
+subst (lam t)        arg idx        = lam $ subst t arg (1 + idx)
+subst (box t)        arg idx        = box $ subst t arg idx
+subst (app t s)      arg idx        = app (subst t arg idx) (subst s arg idx)
+subst (dup t s)      arg idx        = dup (subst t arg idx) (subst s arg (2 + idx))
 
--- Adjusts a substitution map
-subst-fn : (Nat → Term) → Nat → Term
-subst-fn fn zero     = var zero
-subst-fn fn (succ i) = shift succ (fn i)
-
--- Creates a substitution map that replaces only one variable
-at : Nat → Term → Nat → Term
-at 0        term 0     = term
-at 0        term (succ i) = var i
-at (succ n) term = subst-fn (at n term)
-
--- Substitutes all free vars on term with a substitution map, `fn`
-subst : (Nat -> Term) -> Term -> Term
-subst fn (var i)       = fn i
-subst fn (lam bod)     = lam $ subst (subst-fn fn) bod
-subst fn (box bod)     = box $ subst fn bod
-subst fn (app fun arg) = app (subst fn fun) (subst fn arg)
-subst fn (dup arg bod) = dup (subst fn arg) (subst (subst-fn (subst-fn fn)) bod)
-
+-- Lemmas for the cut rule
 shift-type-var : ∀ {A Γ i B} → ofType Γ (var i) B → ofType (A :: Γ) (var (succ i)) B
 shift-type-var (var pf) = var (succ pf)
 
-shift-type-lemma-aux : ∀ Δ {A Γ t B} → ofType (Δ ++ Γ) t B → ofType (Δ ++ A :: Γ) (shift (shift-fn-many (length Δ) succ) t) B
+shift-type-lemma-aux : ∀ Δ {A Γ t B} → ofType (Δ ++ Γ) t B → ofType (Δ ++ A :: Γ) (shift t 1 (length Δ)) B
 shift-type-lemma-aux Δ {A} {Γ} {var _} {B} (var pf)        with Δ
 shift-type-lemma-aux Δ {A} {Γ} {var _} {B} (var pf)        | []      = var (succ pf)
 shift-type-lemma-aux Δ {A} {Γ} {var _} {B} (var zero)      | C :: Δ' = var zero
-shift-type-lemma-aux Δ {A} {Γ} {var _} {B} (var (succ pf)) | C :: Δ' = shift-type-var $ shift-type-lemma-aux Δ' (var pf)
+shift-type-lemma-aux Δ {A} {Γ} {var _} {B} (var (succ pf)) | C :: Δ' = shift-type-var $ shift-type-lemma-aux Δ' {A} (var pf)
 shift-type-lemma-aux Δ {A} {Γ} {lam t} {C => B} (lam pf)             = lam $ shift-type-lemma-aux (C :: Δ) pf
 shift-type-lemma-aux Δ {A} {Γ} {box t} { ! B } (box pf)              = box $ shift-type-lemma-aux Δ pf
 shift-type-lemma-aux Δ {A} {Γ} {app t s} {B} (app pf_t pf_s)         = app (shift-type-lemma-aux Δ pf_t) (shift-type-lemma-aux Δ pf_s)
 shift-type-lemma-aux Δ {A} {Γ} {dup t s} {B} (dup {C} pf_t pf_s)     = dup (shift-type-lemma-aux Δ pf_t) (shift-type-lemma-aux (C :: C :: Δ) pf_s)
 
-shift-type-lemma : ∀ {A Γ t B} → ofType Γ t B → ofType (A :: Γ) (shift succ t) B
+shift-type-lemma : ∀ {A Γ t B} → ofType Γ t B → ofType (A :: Γ) (shift t 1 0) B
 shift-type-lemma pf = shift-type-lemma-aux [] pf
 
 -- Cut rule
-cut_aux : (Δ Γ : Context) (A B : Type) (bod arg : Term) -> ofType (Δ ++ A :: Γ) bod B -> ofType Γ arg A -> ofType (Δ ++ Γ) (subst (at (length Δ) arg) bod) B
+cut_aux : (Δ Γ : Context) (A B : Type) (bod arg : Term) -> ofType (Δ ++ A :: Γ) bod B -> ofType Γ arg A -> ofType (Δ ++ Γ) (subst bod arg (length Δ)) B
 cut_aux Δ Γ A B (var _) arg (var pf1) pf2                with rawIndex pf1 | inspect rawIndex pf1
 cut_aux [] Γ A A (var _) arg (var zero) pf2              | 0               | its _ = pf2
 cut_aux (B :: Δ) Γ A B (var _) arg (var zero) pf2        | 0               | its _ = var zero
 cut_aux [] (C :: Γ) A B (var _) arg (var (succ pf1)) pf2 | succ n          | its eq = rwt (λ x → ofType (C :: Γ) (var x) B) (succ-inj eq) (var pf1)
 cut_aux (C :: Δ) Γ  A B (var _) arg (var (succ pf1)) pf2 | succ n          | its eq =
-  let oftype = rwt (λ x → ofType (Δ ++ Γ) (at (length Δ) arg x) B) (succ-inj eq) $ cut_aux Δ Γ A B (var _)  arg (var pf1) pf2
-  in shift-type-lemma oftype
+   let oftype = rwt (λ x → ofType (Δ ++ Γ) (subst (var x) arg (length Δ)) B) (succ-inj eq) $ cut_aux Δ Γ A B (var _)  arg (var pf1) pf2
+   in shift-type-lemma oftype
 cut_aux Δ Γ A (C => B) (lam t) arg (lam pf1) pf2      = lam $ cut_aux (C :: Δ) Γ A B t arg pf1 pf2
 cut_aux Δ Γ A (! B) (box t) arg (box pf1) pf2         = box $ cut_aux Δ Γ A B t arg pf1 pf2
 cut_aux Δ Γ A B (app t s) arg (app {C} pf_t pf_s) pf2 = app (cut_aux Δ Γ A (C => B) t arg pf_t pf2) (cut_aux Δ Γ A C s arg pf_s pf2)
 cut_aux Δ Γ A B (dup t s) arg (dup {C} pf_t pf_s) pf2 = dup (cut_aux Δ Γ A (! C) t arg pf_t pf2) (cut_aux (C :: C :: Δ) Γ A B s arg pf_s pf2)
 
-cut : (Γ : Context) (A B : Type) (bod arg : Term) -> ofType (A :: Γ) bod B -> ofType Γ arg A -> ofType Γ (subst (at 0 arg) bod) B
+cut : (Γ : Context) (A B : Type) (bod arg : Term) -> ofType (A :: Γ) bod B -> ofType Γ arg A -> ofType Γ (subst bod arg 0) B
 cut = cut_aux []
 
 -- Computes how many times a free variable is used
@@ -186,8 +176,8 @@ reduce Γ (lam t) (A => B) (lam pf) =
   in sigma (lam t') (lam pf')
 reduce Γ (box t) (! A) (box pf) =
   let sigma t' pf' = reduce Γ t A pf
-  in sigma (box t') (box pf') 
-reduce Γ (app (var i) t) A (app {C} pf1 pf2) = 
+  in sigma (box t') (box pf')
+reduce Γ (app (var i) t) A (app {C} pf1 pf2) =
   let sigma x pf1' = reduce Γ (var i) (C => A) pf1
       sigma t' pf2' = reduce Γ t C pf2
   in sigma (app x t') (app pf1' pf2')
@@ -205,22 +195,22 @@ reduce Γ (dup (app t s) r) A (dup {C} pf1 pf2) =
   in sigma (dup x r') (dup pf1' pf2')
 -- swaps
 reduce Γ (app (dup t s) r) A (app {C} (dup {D} pf1 pf2) pf3) =
-  let term = dup t (app s (shift succ (shift succ r)))
+  let term = dup t (app s (shift (shift r 1 0) 1 0))
       type = dup pf1 (app pf2 (shift-type-lemma (shift-type-lemma pf3)))
   in sigma term type
 reduce Γ (dup (dup t s) r) A (dup {C} (dup {D} pf1 pf2) pf3) =
-  let term =  dup t (dup s (shift (shift-fn-many 2 succ) (shift (shift-fn-many 2 succ) r)))
+  let term =  dup t (dup s (shift (shift r 1 2) 1 2))
       type = dup pf1 (dup pf2 (shift-type-lemma-aux (C :: C :: []) {D} (shift-type-lemma-aux (C :: C :: []) {D} pf3)))
   in sigma term type
 -- redexes
 reduce Γ (app (lam t) s) B (app {A} (lam pf1) pf2) =
-  let term = subst (at zero s) t
+  let term = subst t s 0
       type = cut Γ A B t s pf1 pf2
   in sigma term type
 reduce Γ (dup (box t) s) B (dup {A} (box pf1) pf2) =
-  let term = subst (at zero t) (subst (at zero (shift succ t)) s)
-      type' = cut (A :: Γ) A B s (shift succ t) pf2 (shift-type-lemma pf1)
-      type = cut Γ A B (subst (at 0 (shift succ t)) s) t type' pf1
+  let term = subst (subst s (shift t 1 0) 0) t 0
+      type' = cut (A :: Γ) A B s (shift t 1 0) pf2 (shift-type-lemma pf1)
+      type = cut Γ A B (subst s (shift t 1 0) 0) t type' pf1
   in sigma term type
 
 -- Reduce function in a composable form
@@ -294,8 +284,8 @@ noredex-is-normal Γ (dup (box _) _)   A (dup _ _) noredex = absurd $ noredex fo
 -- A typed term is either normal or has a redex
 normal-or-hasredex : (Γ : Context) (t : Term) (A : Type) (pf : ofType Γ t A) → Or (IsNormal t) (HasRedex t)
 normal-or-hasredex Γ (var i) A (var _) = or0 var-normal
-normal-or-hasredex Γ (lam t) (A => B) (lam pf) = case-or (normal-or-hasredex (A :: Γ) t B pf) (or0 ∘ lam-normal) (or1 ∘ lam-redex) 
-normal-or-hasredex Γ (box t) (! A) (box pf) = case-or (normal-or-hasredex Γ t A pf) (or0 ∘ box-normal) (or1 ∘ box-redex) 
+normal-or-hasredex Γ (lam t) (A => B) (lam pf) = case-or (normal-or-hasredex (A :: Γ) t B pf) (or0 ∘ lam-normal) (or1 ∘ lam-redex)
+normal-or-hasredex Γ (box t) (! A) (box pf) = case-or (normal-or-hasredex Γ t A pf) (or0 ∘ box-normal) (or1 ∘ box-redex)
 normal-or-hasredex Γ (app (var i) t) B (app {A} _ pf) = case-or (normal-or-hasredex Γ t A pf) (or0 ∘ app-var-normal) (or1 ∘ (app-redex ∘ or1))
 normal-or-hasredex Γ (app (app t s) r) B (app {A} pf1 pf2) =
   case-or (normal-or-hasredex Γ r A pf2)
@@ -325,10 +315,10 @@ data _~>_ : Term → Term → Set where
   ~>app1  : ∀ {t s s'} → s ~> s' → app t s ~> app t s'
   ~>dup0  : ∀ {t t' s} → t ~> t' → dup t s ~> dup t' s
   ~>dup1  : ∀ {t s s'} → s ~> s' → dup t s ~> dup t s'
-  ~>beta0 : ∀ {t s}    → app (lam t) s ~> subst (at 0 s) t
-  ~>beta1 : ∀ {t s}    → dup (box t) s ~> subst (at 0 t) (subst (at 0 (shift succ t)) s)
-  ~>swap0 : ∀ {t s r}  → app (dup t s) r ~> dup t (app s (shift succ (shift succ r)))
-  ~>swap1 : ∀ {t s r}  → dup (dup t s) r ~> dup t (dup s (shift (shift-fn-many 2 succ) (shift (shift-fn-many 2 succ) r)))
+  ~>beta0 : ∀ {t s}    → app (lam t) s ~> subst t s 0
+  ~>beta1 : ∀ {t s}    → dup (box t) s ~> subst (subst s (shift t 1 0) 0) t 0
+  ~>swap0 : ∀ {t s r}  → app (dup t s) r ~> dup t (app s (shift (shift r 1 0) 1 0))
+  ~>swap1 : ∀ {t s r}  → dup (dup t s) r ~> dup t (dup s (shift (shift r 1 2) 1 2))
 
 -- Directed arbitraty step reduction relation, `a ~>> b` means term `a` reduces to `b` in zero or more steps
 data _~>>_ : Term → Term → Set where
@@ -354,7 +344,6 @@ manystep-norm (~>>trans a b) norm = manystep-norm a (manystep-norm b norm)
 ~>>pow f pf 0 = ~>>refl refl
 ~>>pow f pf (succ n) = ~>>trans (~>>pow f pf n) pf
 
---reduce : (Γ : Context) (t : Term) (A : Type) -> ofType Γ t A -> Sum Term (λ t → ofType Γ t A)
 reduce-~>> : {Γ : Context} {t : Term} {A : Type} {pf : ofType Γ t A} → t ~>> reduce-raw Γ t A pf
 reduce-~>> {Γ} {var i}           {A} {var pf} = ~>>refl refl
 reduce-~>> {Γ} {lam t}           {A} {lam pf} = ~>>cong lam ~>lam reduce-~>>

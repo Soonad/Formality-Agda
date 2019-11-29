@@ -455,7 +455,7 @@ uses-subst-1 n m arg (app fun arg') pf =
         ==[ add-right-swap (uses fun (succ m + n)) (uses arg n) (uses arg' (succ m + n)) ]
           (uses fun (succ m + n) + uses arg' (succ m + n)) + uses arg n
         qed
-  in case-or (fact (uses fun m) (uses arg' m) pf) case0 case1
+  in case-or (+-eq-1 (uses fun m) (uses arg' m) pf) case0 case1
 
 reduce-uses-lemma : (n : Nat) → (arg bod : Term) → uses bod 0 <= 1 → (uses (subst (at 0 arg) bod) n) <= (uses bod (succ n) + uses arg n)
 reduce-uses-lemma n arg bod pf with uses bod 0             | inspect (uses bod) 0

@@ -17,9 +17,9 @@ _+_ 0     m = m
 
 -- Nat subtraction
 _-_ : Nat -> Nat -> Nat
+0      - m = 0
+succ n - 0   = succ n
 succ n - succ m = n - m
-0   - succ m = 0
-n      - 0   = n
 {-# BUILTIN NATMINUS _-_ #-}
 
 -- Nat multiplication
@@ -285,10 +285,10 @@ add-is-succ (succ a) 0 c pf = sigma a (or0 (and refl (succ-inj pf)))
 add-is-succ (succ a) (succ b) 0 pf = absurd (succ-not-0 (trans (add-comm (succ b) a) (succ-inj pf)))
 add-is-succ (succ a) (succ b) (succ c) pf = sigma a (or0 (and refl (succ-inj pf)))
 
-fact : (a b : Nat) -> (a + b) == 1 -> Or (And (a == 0) (b == 1)) (And (b == 0) (a == 1))
-fact a b pf with add-is-succ a b 0 pf
-fact a b pf | sigma 0 (or0 (and eq1 eq2)) = or1 (and eq2 eq1)
-fact a b pf | sigma x (or1 (and eq1 eq2)) =
++-eq-1 : (a b : Nat) -> (a + b) == 1 -> Or (And (a == 0) (b == 1)) (And (b == 0) (a == 1))
++-eq-1 a b pf with add-is-succ a b 0 pf
++-eq-1 a b pf | sigma 0 (or0 (and eq1 eq2)) = or1 (and eq2 eq1)
++-eq-1 a b pf | sigma x (or1 (and eq1 eq2)) =
   let and a==0 x==0 = add-no-inverse a x eq2
       b==1 = rwt (λ x → b == (succ x)) x==0 eq1
   in or0 (and a==0 b==1)
@@ -348,8 +348,8 @@ succ-strict : {a b : Nat} -> (succ a) <= (succ b) -> a <= b
 succ-strict (<=succ pf) = pf
 
 <=-dec : (a b : Nat) -> Or (a <= b) (Not (a <= b))
-<=-dec zero b = or0 <=zero
-<=-dec (succ a) zero = or1 succ-not-<=-0
+<=-dec 0        b        = or0 <=zero
+<=-dec (succ a) 0        = or1 succ-not-<=-0
 <=-dec (succ a) (succ b) = case-or (<=-dec a b) (or0 ∘ <=succ) (or1 ∘ (_∘ succ-strict))
 
 <=-bottom : {a : Nat} -> a <= 0 -> a == 0
@@ -389,6 +389,12 @@ data _<_ : (a : Nat) → (b : Nat) → Set where
   <zero : ∀ {a} → 0 < succ a
   <succ : ∀ {a b} → a < b → succ a < succ b
 
+lessthan : Nat → Nat → Bool
+lessthan _        0        = false
+lessthan 0        (succ _) = true
+lessthan (succ n) (succ m) = lessthan n m
+{-# BUILTIN NATLESS lessthan #-}
+
 n-<-succ : {n : Nat} -> n < succ(n)
 n-<-succ {0} = <zero
 n-<-succ {succ n} = <succ n-<-succ
@@ -400,7 +406,7 @@ not-n-<-0 ()
 <-to-not-== (<succ lt) refl = <-to-not-== lt refl
 
 <-to-<= : {a b : Nat} -> a < b -> (succ a) <= b
-<-to-<= {0} {(succ b)} <zero = <=succ <=zero
+<-to-<= {0} {succ b} <zero = <=succ <=zero
 <-to-<= {succ a} {succ b} (<succ pf) = <=succ (<-to-<= pf)
 
 <-to-<=' : {a b : Nat} -> a < (succ b) -> a <= b
@@ -408,16 +414,16 @@ not-n-<-0 ()
 <-to-<=' {succ a} {succ b} (<succ pf) = <=succ (<-to-<=' pf)
 
 <=-to-< : {a b : Nat} -> (succ a) <= b -> a < b
-<=-to-< {zero} {succ b} _ = <zero
+<=-to-< {0}      {succ b} _ = <zero
 <=-to-< {succ a} {succ b} (<=succ pf) = <succ (<=-to-< pf)
 
 <=-to-<' : {a b : Nat} -> a <= b -> a < (succ b)
-<=-to-<' {zero} {b} _ = <zero
-<=-to-<' {succ a} {succ b} (<=succ pf) = <succ (<=-to-<' pf)
+<=-to-<' <=zero      = <zero
+<=-to-<' (<=succ pf) = <succ (<=-to-<' pf)
 
 <=-is-<-or-== : {a b : Nat} -> a <= b -> Or (a < b) (a == b)
-<=-is-<-or-== {zero}   {zero}   _           = or1 refl
-<=-is-<-or-== {zero}   {succ b} _           = or0 <zero
+<=-is-<-or-== {0}      {0}      _           = or1 refl
+<=-is-<-or-== {0}      {succ b} _           = or0 <zero
 <=-is-<-or-== {succ a} {succ b} (<=succ pf) = case-or (<=-is-<-or-== pf) (or0 ∘ <succ) (or1 ∘ (cong succ))
 
 <-stronger-<= : {a b : Nat} -> a < b -> a <= b
@@ -447,8 +453,8 @@ nat-trichotomy (succ a) (succ b) =
 <-to-not->= {succ a} {succ b} (<succ pf1) pf2 = <-to-not->= pf1 (succ-strict pf2) -- all other cases are inconsistent
 
 not->=-to-< : {a b : Nat} -> Not(b <= a) -> a < b
-not->=-to-< {a} {zero} neg = absurd (neg <=zero)
-not->=-to-< {zero} {succ b} _ = <zero
+not->=-to-< {a} {0}      neg = absurd (neg <=zero)
+not->=-to-< {0} {succ b} _ = <zero
 not->=-to-< {succ a} {succ b} neg = <succ (not->=-to-< (neg ∘ <=succ))
 
 <-comb-<= : {a b c : Nat} -> a < b -> b <= c -> a < c
@@ -671,7 +677,7 @@ data Acc (n : Nat) : Set where
 <-wf n = acc (go n)
   where
   go : ∀ n m → m < n → Acc m
-  go (succ n) zero     _           = acc (λ _ ())
+  go (succ n) 0        _           = acc (λ _ ())
   go (succ n) (succ m) (<succ m<n) = acc (λ o o<sm → go n o (<-comb-<= o<sm (<-to-<= m<n)))
 
 -- Well-founded induction (<= version)
@@ -700,5 +706,5 @@ example-wf : Nat → Nat
 example-wf n = go n (<=-wf n)
   where
   go : ∀ n → Acc<= n → Nat
-  go zero     _       = 0
+  go 0        _            = 0
   go (succ n) (acc-succ a) = succ (go (half n) (a _ (half-<= n)))
