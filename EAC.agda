@@ -42,7 +42,7 @@ data ofType (Γ : Context) : Term → Type → Set where
   app : ∀ {A B fun arg} → ofType Γ fun (A => B) → ofType Γ arg A → ofType Γ (app fun arg) B
   lam : ∀ {A B bod} → ofType (A :: Γ) bod B → ofType Γ (lam bod) (A => B)
   box : ∀ {A bod} → ofType Γ bod A -> ofType Γ (box bod) (! A)
-  dup : ∀ {A B arg bod} → ofType Γ arg (! A) -> ofType (A :: (A :: Γ)) bod B -> ofType Γ (dup arg bod) B
+  dup : ∀ {A B arg bod} → ofType Γ arg (! A) -> ofType (A :: Γ) bod B -> ofType Γ (dup arg bod) B
 
 WellTyped : Context → Term → Set
 WellTyped Γ t = Sum Type (ofType Γ t)
@@ -62,7 +62,7 @@ shift (var i)   inc dpt = var (shift-aux i inc dpt)
 shift (lam t)   inc dpt = lam $ shift t inc (1 + dpt)
 shift (box t)   inc dpt = box $ shift t inc dpt
 shift (app t s) inc dpt = app (shift t inc dpt) (shift s inc dpt)
-shift (dup t s) inc dpt = dup (shift t inc dpt) (shift s inc (2 + dpt))
+shift (dup t s) inc dpt = dup (shift t inc dpt) (shift s inc (1 + dpt))
 
 -- Substitutes a free variable on a term with another term
 subst : (bod arg : Term) (idx : Nat) → Term
@@ -73,7 +73,7 @@ subst (var (succ i)) arg (succ idx) = shift (subst (var i) arg idx) 1 0
 subst (lam t)        arg idx        = lam $ subst t arg (1 + idx)
 subst (box t)        arg idx        = box $ subst t arg idx
 subst (app t s)      arg idx        = app (subst t arg idx) (subst s arg idx)
-subst (dup t s)      arg idx        = dup (subst t arg idx) (subst s arg (2 + idx))
+subst (dup t s)      arg idx        = dup (subst t arg idx) (subst s arg (1 + idx))
 
 -- Lemmas for the cut rule
 shift-type-var : ∀ {A Γ i B} → ofType Γ (var i) B → ofType (A :: Γ) (var (succ i)) B
@@ -87,7 +87,7 @@ shift-type-lemma-aux Δ {A} {Γ} {var _} {B} (var (succ pf)) | C :: Δ' = shift-
 shift-type-lemma-aux Δ {A} {Γ} {lam t} {C => B} (lam pf)             = lam $ shift-type-lemma-aux (C :: Δ) pf
 shift-type-lemma-aux Δ {A} {Γ} {box t} { ! B } (box pf)              = box $ shift-type-lemma-aux Δ pf
 shift-type-lemma-aux Δ {A} {Γ} {app t s} {B} (app pf_t pf_s)         = app (shift-type-lemma-aux Δ pf_t) (shift-type-lemma-aux Δ pf_s)
-shift-type-lemma-aux Δ {A} {Γ} {dup t s} {B} (dup {C} pf_t pf_s)     = dup (shift-type-lemma-aux Δ pf_t) (shift-type-lemma-aux (C :: C :: Δ) pf_s)
+shift-type-lemma-aux Δ {A} {Γ} {dup t s} {B} (dup {C} pf_t pf_s)     = dup (shift-type-lemma-aux Δ pf_t) (shift-type-lemma-aux (C :: Δ) pf_s)
 
 shift-type-lemma : ∀ {A Γ t B} → ofType Γ t B → ofType (A :: Γ) (shift t 1 0) B
 shift-type-lemma pf = shift-type-lemma-aux [] pf
@@ -104,7 +104,7 @@ cut_aux (C :: Δ) Γ  A B (var _) arg (var (succ pf1)) pf2 | succ n          | i
 cut_aux Δ Γ A (C => B) (lam t) arg (lam pf1) pf2      = lam $ cut_aux (C :: Δ) Γ A B t arg pf1 pf2
 cut_aux Δ Γ A (! B) (box t) arg (box pf1) pf2         = box $ cut_aux Δ Γ A B t arg pf1 pf2
 cut_aux Δ Γ A B (app t s) arg (app {C} pf_t pf_s) pf2 = app (cut_aux Δ Γ A (C => B) t arg pf_t pf2) (cut_aux Δ Γ A C s arg pf_s pf2)
-cut_aux Δ Γ A B (dup t s) arg (dup {C} pf_t pf_s) pf2 = dup (cut_aux Δ Γ A (! C) t arg pf_t pf2) (cut_aux (C :: C :: Δ) Γ A B s arg pf_s pf2)
+cut_aux Δ Γ A B (dup t s) arg (dup {C} pf_t pf_s) pf2 = dup (cut_aux Δ Γ A (! C) t arg pf_t pf2) (cut_aux (C :: Δ) Γ A B s arg pf_s pf2)
 
 cut : (Γ : Context) (A B : Type) (bod arg : Term) -> ofType (A :: Γ) bod B -> ofType Γ arg A -> ofType Γ (subst bod arg 0) B
 cut = cut_aux []
@@ -187,20 +187,20 @@ reduce Γ (app (app t s) r) A (app {C} pf1 pf2) =
   in sigma (app x r') (app pf1' pf2')
 reduce Γ (dup (var i) t) A (dup {C} pf1 pf2) =
   let sigma x pf1' = reduce Γ (var i) (! C) pf1
-      sigma t' pf2' = reduce (C :: C :: Γ) t A pf2
+      sigma t' pf2' = reduce (C :: Γ) t A pf2
   in sigma (dup x t') (dup pf1' pf2')
 reduce Γ (dup (app t s) r) A (dup {C} pf1 pf2) =
   let sigma x pf1' = reduce Γ (app t s) (! C) pf1
-      sigma r' pf2' = reduce (C :: C :: Γ) r A pf2
+      sigma r' pf2' = reduce (C :: Γ) r A pf2
   in sigma (dup x r') (dup pf1' pf2')
 -- swaps
 reduce Γ (app (dup t s) r) A (app {C} (dup {D} pf1 pf2) pf3) =
-  let term = dup t (app s (shift (shift r 1 0) 1 0))
-      type = dup pf1 (app pf2 (shift-type-lemma (shift-type-lemma pf3)))
+  let term = dup t (app s (shift r 1 0))
+      type = dup pf1 (app pf2 (shift-type-lemma pf3))
   in sigma term type
 reduce Γ (dup (dup t s) r) A (dup {C} (dup {D} pf1 pf2) pf3) =
-  let term =  dup t (dup s (shift (shift r 1 2) 1 2))
-      type = dup pf1 (dup pf2 (shift-type-lemma-aux (C :: C :: []) {D} (shift-type-lemma-aux (C :: C :: []) {D} pf3)))
+  let term =  dup t (dup s (shift r 1 1))
+      type = dup pf1 (dup pf2 (shift-type-lemma-aux (C :: []) {D} pf3))
   in sigma term type
 -- redexes
 reduce Γ (app (lam t) s) B (app {A} (lam pf1) pf2) =
@@ -208,9 +208,8 @@ reduce Γ (app (lam t) s) B (app {A} (lam pf1) pf2) =
       type = cut Γ A B t s pf1 pf2
   in sigma term type
 reduce Γ (dup (box t) s) B (dup {A} (box pf1) pf2) =
-  let term = subst (subst s (shift t 1 0) 0) t 0
-      type' = cut (A :: Γ) A B s (shift t 1 0) pf2 (shift-type-lemma pf1)
-      type = cut Γ A B (subst s (shift t 1 0) 0) t type' pf1
+  let term = subst s t 0
+      type = cut Γ A B s t pf2 pf1
   in sigma term type
 
 -- Reduce function in a composable form
@@ -227,7 +226,7 @@ data EAC : (t : Term) → Set where
   lam-eac : ∀ {bod} → at-level-affine bod 0 0 == true → EAC bod -> EAC (lam bod)
   app-eac : ∀ {fun arg} → EAC fun → EAC arg -> EAC (app fun arg)
   box-eac : ∀ {bod} → EAC bod → EAC (box bod)
-  dup-eac : ∀ {arg bod} → at-level-affine bod 0 1 == true → at-level-affine bod 1 1 == true → EAC arg → EAC bod → EAC (dup arg bod)
+  dup-eac : ∀ {arg bod} → at-level bod 0 1 == true → EAC arg → EAC bod → EAC (dup arg bod)
 
 -- This term is on normal form
 data IsNormal : (t : Term) → Set where
@@ -271,11 +270,11 @@ noredex-is-normal Γ (app (app t s) r) A (app {C} pf1 pf2) noredex =
   app-app-normal
   (noredex-is-normal Γ (app t s) (C => A) pf1 (noredex ∘ (app-redex ∘ or0)))
   (noredex-is-normal Γ r C pf2 (noredex ∘ (app-redex ∘ or1)))
-noredex-is-normal Γ (dup (var i) t) A (dup {C} _ pf) noredex      = dup-var-normal (noredex-is-normal (C :: C :: Γ) t A pf (noredex ∘ (dup-redex ∘ or1)))
+noredex-is-normal Γ (dup (var i) t) A (dup {C} _ pf) noredex      = dup-var-normal (noredex-is-normal (C :: Γ) t A pf (noredex ∘ (dup-redex ∘ or1)))
 noredex-is-normal Γ (dup (app t s) r) A (dup {C} pf1 pf2) noredex =
   dup-app-normal
   (noredex-is-normal Γ (app t s) (! C) pf1 (noredex ∘ (dup-redex ∘ or0)))
-  (noredex-is-normal (C :: C :: Γ) r A pf2 (noredex ∘ (dup-redex ∘ or1)))
+  (noredex-is-normal (C :: Γ) r A pf2 (noredex ∘ (dup-redex ∘ or1)))
 noredex-is-normal Γ (app (dup _ _) _) A (app _ _) noredex = absurd $ noredex found-app-swap
 noredex-is-normal Γ (dup (dup _ _) _) A (dup _ _) noredex = absurd $ noredex found-dup-swap
 noredex-is-normal Γ (app (lam _) _)   A (app _ _) noredex = absurd $ noredex found-app-redex
@@ -293,9 +292,9 @@ normal-or-hasredex Γ (app (app t s) r) B (app {A} pf1 pf2) =
                  (λ y → or0 (app-app-normal y x))
                  (λ y → or1 (app-redex (or0 y))))
           (λ x → or1 (app-redex (or1 x)))
-normal-or-hasredex Γ (dup (var i) t) B (dup {A} _ pf) = case-or (normal-or-hasredex (A :: A :: Γ) t B pf) (or0 ∘ dup-var-normal) (or1 ∘ (dup-redex ∘ or1))
+normal-or-hasredex Γ (dup (var i) t) B (dup {A} _ pf) = case-or (normal-or-hasredex (A :: Γ) t B pf) (or0 ∘ dup-var-normal) (or1 ∘ (dup-redex ∘ or1))
 normal-or-hasredex Γ (dup (app t s) r) B (dup {A} pf1 pf2) =
-  case-or (normal-or-hasredex (A :: A :: Γ) r B pf2)
+  case-or (normal-or-hasredex (A :: Γ) r B pf2)
           (λ x → case-or (normal-or-hasredex Γ (app t s) (! A) pf1)
                  (λ y → or0 (dup-app-normal y x))
                  (λ y → or1 (dup-redex (or0 y))))
@@ -316,9 +315,9 @@ data _~>_ : Term → Term → Set where
   ~>dup0  : ∀ {t t' s} → t ~> t' → dup t s ~> dup t' s
   ~>dup1  : ∀ {t s s'} → s ~> s' → dup t s ~> dup t s'
   ~>beta0 : ∀ {t s}    → app (lam t) s ~> subst t s 0
-  ~>beta1 : ∀ {t s}    → dup (box t) s ~> subst (subst s (shift t 1 0) 0) t 0
-  ~>swap0 : ∀ {t s r}  → app (dup t s) r ~> dup t (app s (shift (shift r 1 0) 1 0))
-  ~>swap1 : ∀ {t s r}  → dup (dup t s) r ~> dup t (dup s (shift (shift r 1 2) 1 2))
+  ~>beta1 : ∀ {t s}    → dup (box t) s ~> subst s t 0
+  ~>swap0 : ∀ {t s r}  → app (dup t s) r ~> dup t (app s (shift r 1 0))
+  ~>swap1 : ∀ {t s r}  → dup (dup t s) r ~> dup t (dup s (shift r 1 1))
 
 -- Directed arbitraty step reduction relation, `a ~>> b` means term `a` reduces to `b` in zero or more steps
 data _~>>_ : Term → Term → Set where
@@ -359,6 +358,6 @@ reduce-~>> {Γ} {dup (var i) s}   {A} {dup (var pf1) pf2} = ~>>cong (dup (var i)
 reduce-~>> {Γ} {dup (box t) s}   {A} {dup {C} (box pf1) pf2} = ~>>step (~>beta1 {t} {s})
 reduce-~>> {Γ} {dup (app t s) r} {A} {dup {C} (app pf1 pf2) pf3} = let
   part0 = ~>>cong (dup (app t s)) ~>dup1 reduce-~>>
-  part1 = ~>>cong (λ x → dup x (reduce-raw (C :: C :: Γ) r A pf3)) ~>dup0 (reduce-~>> {Γ} {app t s} { ! C } {app pf1 pf2})
+  part1 = ~>>cong (λ x → dup x (reduce-raw (C :: Γ) r A pf3)) ~>dup0 (reduce-~>> {Γ} {app t s} { ! C } {app pf1 pf2})
   in ~>>trans part0 part1
 reduce-~>> {Γ} {dup (dup t s) r} {A} {dup {C} (dup pf1 pf2) pf3} = ~>>step ~>swap1
