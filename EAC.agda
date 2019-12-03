@@ -381,31 +381,43 @@ manystep-norm (~>>trans a b) norm = manystep-norm a (manystep-norm b norm)
   in ~>>trans part0 part1
 ~>>reduce {Γ} {dup (dup t s) r} {A} {dup {C} (dup pf1 pf2) pf3} = ~>>step ~>swap1
 
--- Datatype of the continuation associated with a subterm, keeping track of its level
-data Continuation : (Term -> Term) → Nat → Set where
-  var  : Continuation (λ x → x) 0
-  lam  : ∀ {level f} → Continuation f level → Continuation (λ x → lam (f x)) level
-  box  : ∀ {level f} → Continuation f level → Continuation (λ x → box (f x)) (succ level)
-  app0 : ∀ {level f} → Continuation f level → (t : Term) → Continuation (λ x → app (f x) t) level
-  app1 : ∀ {level f} → Continuation f level → (t : Term) → Continuation (λ x → app t (f x)) level
-  dup0 : ∀ {level f} → Continuation f level → (t : Term) → Continuation (λ x → dup (f x) t) level
-  dup1 : ∀ {level f} → Continuation f level → (t : Term) → Continuation (λ x → dup t (f x)) level
-
 -- `Subterm s t n` should be read as: `s` is a subterm of `t` at level `n`
-data Subterm (s t : Term) (level : Nat) : Set where
-  subterm : ∀ {ret} → Continuation ret level → ret s == t → Subterm s t level
+data Subterm : Term → Term → Nat → Set where
+  var  : ∀ {t}           → Subterm t t 0
+  lam  : ∀ {s t level}   → Subterm s t level → Subterm s (lam t) level
+  box  : ∀ {s t level}   → Subterm s t level → Subterm s (box t) (1 + level)
+  app0 : ∀ {s t u level} → Subterm s t level → Subterm s (app t u) level
+  app1 : ∀ {s t u level} → Subterm s t level → Subterm s (app u t) level
+  dup0 : ∀ {s t u level} → Subterm s t level → Subterm s (dup t u) level
+  dup1 : ∀ {s t u level} → Subterm s t level → Subterm s (dup u t) level
 
-~>cont : ∀ {s s' ret level} → Continuation ret level → s ~> s' → ret s ~> ret s'
-~>cont var s~>s' = s~>s'
-~>cont (lam cont) s~>s' = ~>lam (~>cont cont s~>s')
-~>cont (box cont) s~>s' = ~>box (~>cont cont s~>s')
-~>cont (app0 cont t) s~>s' = ~>app0 (~>cont cont s~>s')
-~>cont (app1 cont t) s~>s' = ~>app1 (~>cont cont s~>s')
-~>cont (dup0 cont t) s~>s' = ~>dup0 (~>cont cont s~>s')
-~>cont (dup1 cont t) s~>s' = ~>dup1 (~>cont cont s~>s')
-
-~>>cont : ∀ {s s' ret level} → Continuation ret level → s ~>> s' → ret s ~>> ret s'
-~>>cont {s} {s'} {ret} {level} cont = ~>>cong ret (~>cont cont)
+~>subterm : ∀ {t s s' level} → Subterm s t level → s ~> s' → Sum Term (λ t' → And (Subterm s' t' level) (t ~> t'))
+~>subterm {s} {s} {s'} {level} var s~>s' = sigma s' (and var s~>s')
+~>subterm (lam  sub) s~>s' =
+  let sigma t' (and sub' red) = ~>subterm sub s~>s'
+  in sigma (lam t') (and (lam sub') (~>lam red))
+~>subterm (box  sub) s~>s' =
+  let sigma t' (and sub' red) = ~>subterm sub s~>s'
+  in sigma (box t') (and (box sub') (~>box red))
+~>subterm {app t u} {s} {s'} {level} (app0 sub) s~>s' =
+  let sigma t' (and sub' red) = ~>subterm sub s~>s'
+  in sigma (app t' u) (and (app0 sub') (~>app0 red))
+~>subterm {app u t} {s} {s'} {level} (app1 sub) s~>s' =
+  let sigma t' (and sub' red) = ~>subterm sub s~>s'
+  in sigma (app u t') (and (app1 sub') (~>app1 red))
+~>subterm {dup t u} {s} {s'} {level} (dup0 sub) s~>s' =
+  let sigma t' (and sub' red) = ~>subterm sub s~>s'
+  in sigma (dup t' u) (and (dup0 sub') (~>dup0 red))
+~>subterm {dup u t} {s} {s'} {level} (dup1 sub) s~>s' =
+  let sigma t' (and sub' red) = ~>subterm sub s~>s'
+  in sigma (dup u t') (and (dup1 sub') (~>dup1 red))
 
 ~>>subterm : ∀ {t s s' level} → Subterm s t level → s ~>> s' → Sum Term (λ t' → And (Subterm s' t' level) (t ~>> t'))
-~>>subterm {t} {s} {s'} {_} (subterm {ret} cont refl) s~>>s' = sigma (ret s') (and (subterm cont refl) (~>>cont cont s~>>s'))
+~>>subterm sub (~>>refl refl) = sigma _ (and sub (~>>refl refl))
+~>>subterm sub (~>>step red) =
+  let sigma t' (and sub' red') = ~>subterm sub red
+  in sigma t' (and sub' (~>>step red'))
+~>>subterm sub (~>>trans red0 red1) =
+  let sigma t'  (and sub0 red0') = ~>>subterm sub red0
+      sigma t'' (and sub1 red1') = ~>>subterm sub0 red1
+  in sigma t'' (and sub1 (~>>trans red0' red1'))
