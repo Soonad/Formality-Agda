@@ -106,8 +106,8 @@ cut_aux Δ Γ A (! B) (box t) arg (box pf1) pf2         = box $ cut_aux Δ Γ A 
 cut_aux Δ Γ A B (app t s) arg (app {C} pf_t pf_s) pf2 = app (cut_aux Δ Γ A (C => B) t arg pf_t pf2) (cut_aux Δ Γ A C s arg pf_s pf2)
 cut_aux Δ Γ A B (dup t s) arg (dup {C} pf_t pf_s) pf2 = dup (cut_aux Δ Γ A (! C) t arg pf_t pf2) (cut_aux (C :: Δ) Γ A B s arg pf_s pf2)
 
-cut : (Γ : Context) (A B : Type) (bod arg : Term) -> ofType (A :: Γ) bod B -> ofType Γ arg A -> ofType Γ (subst bod arg 0) B
-cut = cut_aux []
+cut : ∀ {Γ A B bod arg} -> ofType (A :: Γ) bod B -> ofType Γ arg A -> ofType Γ (subst bod arg 0) B
+cut {Γ} {A} {B} {bod} {arg} = cut_aux [] Γ A B bod arg
 
 -- Computes how many times a free variable is used
 uses : Term -> Nat -> Nat
@@ -205,11 +205,11 @@ reduce Γ (dup (dup t s) r) A (dup {C} (dup {D} pf1 pf2) pf3) =
 -- redexes
 reduce Γ (app (lam t) s) B (app {A} (lam pf1) pf2) =
   let term = subst t s 0
-      type = cut Γ A B t s pf1 pf2
+      type = cut pf1 pf2
   in sigma term type
 reduce Γ (dup (box t) s) B (dup {A} (box pf1) pf2) =
   let term = subst s t 0
-      type = cut Γ A B s t pf2 pf1
+      type = cut pf2 pf1
   in sigma term type
 
 -- Reduce function in a composable form
@@ -343,21 +343,69 @@ manystep-norm (~>>trans a b) norm = manystep-norm a (manystep-norm b norm)
 ~>>pow f pf 0 = ~>>refl refl
 ~>>pow f pf (succ n) = ~>>trans (~>>pow f pf n) pf
 
-reduce-~>> : {Γ : Context} {t : Term} {A : Type} {pf : ofType Γ t A} → t ~>> reduce-raw Γ t A pf
-reduce-~>> {Γ} {var i}           {A} {var pf} = ~>>refl refl
-reduce-~>> {Γ} {lam t}           {A} {lam pf} = ~>>cong lam ~>lam reduce-~>>
-reduce-~>> {Γ} {box t}           {A} {box pf} = ~>>cong box ~>box reduce-~>>
-reduce-~>> {Γ} {app (var i) s}   {A} {app (var pf1) pf2} = ~>>cong (app (var i)) ~>app1 reduce-~>>
-reduce-~>> {Γ} {app (lam t) s}   {A} {app {C} (lam pf1) pf2} = ~>>step ~>beta0
-reduce-~>> {Γ} {app (app t s) r} {A} {app {C} (app pf1 pf2) pf3} = let
-  part0 = ~>>cong (app (app t s)) ~>app1 reduce-~>>
-  part1 = ~>>cong (λ x → app x (reduce-raw Γ r C pf3)) ~>app0 (reduce-~>> {Γ} {app t s} {C => A} {app pf1 pf2})
+-- Step reductions maintain typing
+~>type : ∀ {Γ t t' A} → ofType Γ t A → t ~> t' → ofType Γ t' A
+~>type (lam pf) (~>lam red) = lam $ ~>type pf red
+~>type (box pf) (~>box red) = box $ ~>type pf red
+~>type (app pf1 pf2) (~>app0 red) = app (~>type pf1 red) pf2
+~>type (app pf1 pf2) (~>app1 red) = app pf1 (~>type pf2 red)
+~>type (dup pf1 pf2) (~>dup0 red) = dup (~>type pf1 red) pf2
+~>type (dup pf1 pf2) (~>dup1 red) = dup pf1 (~>type pf2 red)
+~>type (app (lam {A} pf1) pf2) ~>beta0 = cut pf1 pf2
+~>type (dup (box pf1) pf2) ~>beta1 = cut pf2 pf1
+~>type (app (dup pf1 pf2) pf3) ~>swap0 = dup pf1 (app pf2 (shift-type-lemma pf3))
+~>type (dup {A} (dup pf1 pf2) pf3) ~>swap1 = dup pf1 (dup pf2 (shift-type-lemma-aux (A :: []) pf3))
+
+~>>type : ∀ {Γ t t' A} → ofType Γ t A → t ~>> t' → ofType Γ t' A
+~>>type pf (~>>refl refl) = pf
+~>>type pf (~>>step red) = ~>type pf red
+~>>type pf (~>>trans red1 red2) = ~>>type (~>>type pf red1) red2
+
+-- The reduce function indeed reduces its input terms
+~>>reduce : {Γ : Context} {t : Term} {A : Type} {pf : ofType Γ t A} → t ~>> reduce-raw Γ t A pf
+~>>reduce {Γ} {var i}           {A} {var pf} = ~>>refl refl
+~>>reduce {Γ} {lam t}           {A} {lam pf} = ~>>cong lam ~>lam ~>>reduce
+~>>reduce {Γ} {box t}           {A} {box pf} = ~>>cong box ~>box ~>>reduce
+~>>reduce {Γ} {app (var i) s}   {A} {app (var pf1) pf2} = ~>>cong (app (var i)) ~>app1 ~>>reduce
+~>>reduce {Γ} {app (lam t) s}   {A} {app {C} (lam pf1) pf2} = ~>>step ~>beta0
+~>>reduce {Γ} {app (app t s) r} {A} {app {C} (app pf1 pf2) pf3} = let
+  part0 = ~>>cong (app (app t s)) ~>app1 ~>>reduce
+  part1 = ~>>cong (λ x → app x (reduce-raw Γ r C pf3)) ~>app0 (~>>reduce {Γ} {app t s} {C => A} {app pf1 pf2})
   in ~>>trans part0 part1
-reduce-~>> {Γ} {app (dup t s) r} {A} {app {C} (dup pf1 pf2) pf3} = ~>>step ~>swap0
-reduce-~>> {Γ} {dup (var i) s}   {A} {dup (var pf1) pf2} = ~>>cong (dup (var i)) ~>dup1 reduce-~>>
-reduce-~>> {Γ} {dup (box t) s}   {A} {dup {C} (box pf1) pf2} = ~>>step (~>beta1 {t} {s})
-reduce-~>> {Γ} {dup (app t s) r} {A} {dup {C} (app pf1 pf2) pf3} = let
-  part0 = ~>>cong (dup (app t s)) ~>dup1 reduce-~>>
-  part1 = ~>>cong (λ x → dup x (reduce-raw (C :: Γ) r A pf3)) ~>dup0 (reduce-~>> {Γ} {app t s} { ! C } {app pf1 pf2})
+~>>reduce {Γ} {app (dup t s) r} {A} {app {C} (dup pf1 pf2) pf3} = ~>>step ~>swap0
+~>>reduce {Γ} {dup (var i) s}   {A} {dup (var pf1) pf2} = ~>>cong (dup (var i)) ~>dup1 ~>>reduce
+~>>reduce {Γ} {dup (box t) s}   {A} {dup {C} (box pf1) pf2} = ~>>step (~>beta1 {t} {s})
+~>>reduce {Γ} {dup (app t s) r} {A} {dup {C} (app pf1 pf2) pf3} = let
+  part0 = ~>>cong (dup (app t s)) ~>dup1 ~>>reduce
+  part1 = ~>>cong (λ x → dup x (reduce-raw (C :: Γ) r A pf3)) ~>dup0 (~>>reduce {Γ} {app t s} { ! C } {app pf1 pf2})
   in ~>>trans part0 part1
-reduce-~>> {Γ} {dup (dup t s) r} {A} {dup {C} (dup pf1 pf2) pf3} = ~>>step ~>swap1
+~>>reduce {Γ} {dup (dup t s) r} {A} {dup {C} (dup pf1 pf2) pf3} = ~>>step ~>swap1
+
+-- Datatype of the continuation associated with a subterm, keeping track of its level
+data Continuation : (Term -> Term) → Nat → Set where
+  var  : Continuation (λ x → x) 0
+  lam  : ∀ {level f} → Continuation f level → Continuation (λ x → lam (f x)) level
+  box  : ∀ {level f} → Continuation f level → Continuation (λ x → box (f x)) (succ level)
+  app0 : ∀ {level f} → Continuation f level → (t : Term) → Continuation (λ x → app (f x) t) level
+  app1 : ∀ {level f} → Continuation f level → (t : Term) → Continuation (λ x → app t (f x)) level
+  dup0 : ∀ {level f} → Continuation f level → (t : Term) → Continuation (λ x → dup (f x) t) level
+  dup1 : ∀ {level f} → Continuation f level → (t : Term) → Continuation (λ x → dup t (f x)) level
+
+-- `Subterm s t n` should be read as: `s` is a subterm of `t` at level `n`
+data Subterm (s t : Term) (level : Nat) : Set where
+  subterm : ∀ {ret} → Continuation ret level → ret s == t → Subterm s t level
+
+~>cont : ∀ {s s' ret level} → Continuation ret level → s ~> s' → ret s ~> ret s'
+~>cont var s~>s' = s~>s'
+~>cont (lam cont) s~>s' = ~>lam (~>cont cont s~>s')
+~>cont (box cont) s~>s' = ~>box (~>cont cont s~>s')
+~>cont (app0 cont t) s~>s' = ~>app0 (~>cont cont s~>s')
+~>cont (app1 cont t) s~>s' = ~>app1 (~>cont cont s~>s')
+~>cont (dup0 cont t) s~>s' = ~>dup0 (~>cont cont s~>s')
+~>cont (dup1 cont t) s~>s' = ~>dup1 (~>cont cont s~>s')
+
+~>>cont : ∀ {s s' ret level} → Continuation ret level → s ~>> s' → ret s ~>> ret s'
+~>>cont {s} {s'} {ret} {level} cont = ~>>cong ret (~>cont cont)
+
+~>>subterm : ∀ {t s s' level} → Subterm s t level → s ~>> s' → Sum Term (λ t' → And (Subterm s' t' level) (t ~>> t'))
+~>>subterm {t} {s} {s'} {_} (subterm {ret} cont refl) s~>>s' = sigma (ret s') (and (subterm cont refl) (~>>cont cont s~>>s'))
